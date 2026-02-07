@@ -12,12 +12,12 @@ dotnet build
 ## Run (local)
 
 ```bash
-dotnet run --project "Prompt Gateway Provider - OpenAI/src/Provider.Worker"
+dotnet run --project "Prompt Gateway Provider - OpenAI/src/Provider.Worker.Host"
 ```
 
 ## Configuration
 
-Update `Prompt Gateway Provider - OpenAI/src/Provider.Worker/appsettings.json` or provide environment variables:
+Update `Prompt Gateway Provider - OpenAI/src/Provider.Worker.Host/appsettings.json` or provide environment variables:
 
 - `ProviderWorker__InputQueueUrl`
 - `ProviderWorker__OutputQueueUrl`
@@ -33,8 +33,8 @@ Update `Prompt Gateway Provider - OpenAI/src/Provider.Worker/appsettings.json` o
   "job_id": "job-123",
   "attempt_id": "attempt-1",
   "task_type": "chat_completion",
-  "prompt_s3_key": "prompts/job-123.txt",
-  "prompt_s3_bucket": "your-prompt-bucket",
+  "prompt_key": "prompts/job-123.txt",
+  "prompt_bucket": "your-prompt-bucket",
   "system_prompt": "You are a helpful assistant.",
   "model": "gpt-4o-mini",
   "parameters": {

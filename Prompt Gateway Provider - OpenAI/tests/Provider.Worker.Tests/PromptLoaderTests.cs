@@ -1,6 +1,3 @@
-using System.Text;
-using Amazon.S3;
-using Amazon.S3.Model;
 using NSubstitute;
 using Provider.Worker.Models;
 using Provider.Worker.Options;
@@ -8,17 +5,17 @@ using Provider.Worker.Services;
 
 namespace Provider.Worker.Tests;
 
-public class PromptLoaderTests
+public class PromptTemplateStoreTests
 {
     [Test]
-    public void LoadPromptAsync_ThrowsWhenBucketMissing()
+    public void GetTemplateAsync_ThrowsWhenBucketMissing()
     {
-        var s3 = Substitute.For<IAmazonS3>();
+        var store = Substitute.For<IObjectStore>();
         var options = TestOptions.Create(new ProviderWorkerOptions
         {
             PromptBucket = string.Empty
         });
-        var loader = new PromptLoader(s3, options);
+        var templateStore = new PromptTemplateStore(store, options);
 
         var job = new CanonicalJobRequest
         {
@@ -26,19 +23,19 @@ public class PromptLoaderTests
         };
 
         Assert.That(
-            async () => await loader.LoadPromptAsync(job, CancellationToken.None),
+            async () => await templateStore.GetTemplateAsync(job, CancellationToken.None),
             Throws.TypeOf<InvalidOperationException>().With.Message.EqualTo("Prompt bucket not configured."));
     }
 
     [Test]
-    public void LoadPromptAsync_ThrowsWhenKeyMissing()
+    public void GetTemplateAsync_ThrowsWhenKeyMissing()
     {
-        var s3 = Substitute.For<IAmazonS3>();
+        var store = Substitute.For<IObjectStore>();
         var options = TestOptions.Create(new ProviderWorkerOptions
         {
             PromptBucket = "bucket"
         });
-        var loader = new PromptLoader(s3, options);
+        var templateStore = new PromptTemplateStore(store, options);
 
         var job = new CanonicalJobRequest
         {
@@ -46,36 +43,30 @@ public class PromptLoaderTests
         };
 
         Assert.That(
-            async () => await loader.LoadPromptAsync(job, CancellationToken.None),
-            Throws.TypeOf<InvalidOperationException>().With.Message.EqualTo("Prompt S3 key missing."));
+            async () => await templateStore.GetTemplateAsync(job, CancellationToken.None),
+            Throws.TypeOf<InvalidOperationException>().With.Message.EqualTo("Prompt key missing."));
     }
 
     [Test]
-    public async Task LoadPromptAsync_ReturnsPromptText()
+    public async Task GetTemplateAsync_ReturnsPromptText()
     {
-        var s3 = Substitute.For<IAmazonS3>();
+        var store = Substitute.For<IObjectStore>();
         var options = TestOptions.Create(new ProviderWorkerOptions
         {
             PromptBucket = "bucket"
         });
-        var loader = new PromptLoader(s3, options);
-
-        var content = "hello world";
-        var response = new GetObjectResponse
-        {
-            ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(content))
-        };
-
-        s3.GetObjectAsync(Arg.Any<GetObjectRequest>(), Arg.Any<CancellationToken>())
-            .Returns(response);
+        var templateStore = new PromptTemplateStore(store, options);
 
         var job = new CanonicalJobRequest
         {
             PromptS3Key = "prompts/job.txt"
         };
 
-        var result = await loader.LoadPromptAsync(job, CancellationToken.None);
+        store.GetObjectTextAsync("bucket", "prompts/job.txt", Arg.Any<CancellationToken>())
+            .Returns("hello world");
 
-        Assert.That(result, Is.EqualTo(content));
+        var result = await templateStore.GetTemplateAsync(job, CancellationToken.None);
+
+        Assert.That(result, Is.EqualTo("hello world"));
     }
 }

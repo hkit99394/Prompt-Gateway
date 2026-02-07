@@ -5,11 +5,6 @@
 /Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/obj/Release/net10.0/Provider.Worker.Tests.AssemblyInfoInputs.cache
 /Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/obj/Release/net10.0/Provider.Worker.Tests.AssemblyInfo.cs
 /Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/obj/Release/net10.0/Provider.Worker.Tests.csproj.CoreCompileInputs.cache
-/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/bin/Release/net10.0/Provider.Worker.deps.json
-/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/bin/Release/net10.0/Provider.Worker.runtimeconfig.json
-/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/bin/Release/net10.0/appsettings.Development.json
-/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/bin/Release/net10.0/appsettings.json
-/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/bin/Release/net10.0/Provider.Worker
 /Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/bin/Release/net10.0/NUnit3.TestAdapter.pdb
 /Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/bin/Release/net10.0/nunit.engine.dll
 /Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/bin/Release/net10.0/nunit.engine.api.dll
@@ -200,3 +195,6 @@
 /Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/obj/Release/net10.0/Provider.Worker.Tests.pdb
 /Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/obj/Release/net10.0/Provider.Worker.Tests.genruntimeconfig.cache
 /Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/obj/Release/net10.0/ref/Provider.Worker.Tests.dll
+/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/obj/Release/net10.0/Provider.Worker.Tests.sourcelink.json
+/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/bin/Release/net10.0/Provider.Worker.Aws.dll
+/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/bin/Release/net10.0/Provider.Worker.Aws.pdb

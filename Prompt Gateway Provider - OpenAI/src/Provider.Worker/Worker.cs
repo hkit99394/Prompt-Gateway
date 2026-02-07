@@ -1,5 +1,6 @@
 using System.Text.Json;
-using Amazon.SQS.Model;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Provider.Worker.Models;
 using Provider.Worker.Options;
@@ -10,10 +11,11 @@ namespace Provider.Worker;
 public class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
-    private readonly ISqsClient _sqs;
+    private readonly IQueueClient _sqs;
     private readonly ProviderWorkerOptions _options;
     private readonly IDedupeStore _dedupeStore;
-    private readonly IPromptLoader _promptLoader;
+    private readonly IPromptTemplateStore _templateStore;
+    private readonly IPromptBuilder _promptBuilder;
     private readonly IOpenAiClient _openAiClient;
     private readonly IResultPayloadStore _payloadStore;
     private readonly IResultPublisher _publisher;
@@ -21,10 +23,11 @@ public class Worker : BackgroundService
 
     public Worker(
         ILogger<Worker> logger,
-        ISqsClient sqs,
+        IQueueClient sqs,
         IOptions<ProviderWorkerOptions> options,
         IDedupeStore dedupeStore,
-        IPromptLoader promptLoader,
+        IPromptTemplateStore templateStore,
+        IPromptBuilder promptBuilder,
         IOpenAiClient openAiClient,
         IResultPayloadStore payloadStore,
         IResultPublisher publisher)
@@ -33,7 +36,8 @@ public class Worker : BackgroundService
         _sqs = sqs;
         _options = options.Value;
         _dedupeStore = dedupeStore;
-        _promptLoader = promptLoader;
+        _templateStore = templateStore;
+        _promptBuilder = promptBuilder;
         _openAiClient = openAiClient;
         _payloadStore = payloadStore;
         _publisher = publisher;
@@ -64,15 +68,15 @@ public class Worker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var request = new ReceiveMessageRequest
+            var request = new QueueReceiveRequest
             {
                 QueueUrl = _options.InputQueueUrl,
                 MaxNumberOfMessages = Math.Clamp(_options.MaxMessages, 1, 10),
                 WaitTimeSeconds = _options.WaitTimeSeconds,
-                VisibilityTimeout = _options.VisibilityTimeoutSeconds
+                VisibilityTimeoutSeconds = _options.VisibilityTimeoutSeconds
             };
 
-            ReceiveMessageResponse response;
+            QueueReceiveResult response;
             try
             {
                 response = await _sqs.ReceiveMessageAsync(request, stoppingToken);
@@ -123,8 +127,15 @@ public class Worker : BackgroundService
         return ExecuteAsync(cancellationToken);
     }
 
-    private async Task ProcessMessageAsync(Message message, CancellationToken stoppingToken)
+    private async Task ProcessMessageAsync(QueueMessage message, CancellationToken stoppingToken)
     {
+        if (string.IsNullOrWhiteSpace(message.Body))
+        {
+            _logger.LogWarning("Empty message body. Deleting message.");
+            await DeleteMessageAsync(message, stoppingToken);
+            return;
+        }
+
         CanonicalJobRequest? job;
         try
         {
@@ -152,10 +163,25 @@ public class Worker : BackgroundService
             ["model"] = job.Model ?? _options.OpenAi.Model
         });
 
-        if (!await _dedupeStore.TryStartAsync(job.JobId, job.AttemptId, stoppingToken))
+        var dedupeDecision = await _dedupeStore.TryStartAsync(job.JobId, job.AttemptId, stoppingToken);
+        if (dedupeDecision == DedupeDecision.DuplicateCompleted)
         {
-            _logger.LogInformation("Duplicate job detected. Skipping.");
+            _logger.LogInformation("Duplicate completed job detected. Deleting message.");
             await DeleteMessageAsync(message, stoppingToken);
+            return;
+        }
+
+        if (dedupeDecision == DedupeDecision.DuplicateInProgress)
+        {
+            _logger.LogInformation("Duplicate in-progress job detected. Skipping.");
+            if (!string.IsNullOrWhiteSpace(message.ReceiptHandle))
+            {
+                await _sqs.ChangeMessageVisibilityAsync(
+                    _options.InputQueueUrl,
+                    message.ReceiptHandle,
+                    _options.VisibilityTimeoutSeconds,
+                    stoppingToken);
+            }
             return;
         }
 
@@ -173,7 +199,8 @@ public class Worker : BackgroundService
         string promptText;
         try
         {
-            promptText = await _promptLoader.LoadPromptAsync(job, stoppingToken);
+            var template = await _templateStore.GetTemplateAsync(job, stoppingToken);
+            promptText = _promptBuilder.BuildPrompt(job, template);
         }
         catch (Exception ex)
         {
@@ -259,7 +286,7 @@ public class Worker : BackgroundService
         await _publisher.PublishAsync(resultEvent, stoppingToken);
     }
 
-    private Task DeleteMessageAsync(Message message, CancellationToken stoppingToken)
+    private Task DeleteMessageAsync(QueueMessage message, CancellationToken stoppingToken)
     {
         if (string.IsNullOrWhiteSpace(message.ReceiptHandle))
         {
@@ -269,7 +296,7 @@ public class Worker : BackgroundService
         return _sqs.DeleteMessageAsync(_options.InputQueueUrl, message.ReceiptHandle, stoppingToken);
     }
 
-    private async Task StartVisibilityExtenderAsync(Message message, CancellationToken cancellationToken)
+    private async Task StartVisibilityExtenderAsync(QueueMessage message, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(message.ReceiptHandle))
         {

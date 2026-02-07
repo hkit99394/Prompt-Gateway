@@ -1,6 +1,4 @@
 using System.Text;
-using Amazon.S3;
-using Amazon.S3.Model;
 using Microsoft.Extensions.Options;
 using Provider.Worker.Models;
 using Provider.Worker.Options;
@@ -21,9 +19,9 @@ public interface IResultPayloadStore
         CancellationToken cancellationToken);
 }
 
-public class ResultPayloadStore(IAmazonS3 s3, IOptions<ProviderWorkerOptions> options) : IResultPayloadStore
+public class ResultPayloadStore(IObjectStore objectStore, IOptions<ProviderWorkerOptions> options) : IResultPayloadStore
 {
-    private readonly IAmazonS3 _s3 = s3;
+    private readonly IObjectStore _objectStore = objectStore;
     private readonly ProviderWorkerOptions _options = options.Value;
 
     public async Task<string?> StoreIfLargeAsync(
@@ -48,16 +46,12 @@ public class ResultPayloadStore(IAmazonS3 s3, IOptions<ProviderWorkerOptions> op
 
         var key = $"{_options.ResultPrefix}{job.JobId}/{job.AttemptId}/payload.json";
 
-        var request = new PutObjectRequest
-        {
-            BucketName = bucket,
-            Key = key,
-            ContentBody = payload,
-            ContentType = "application/json"
-        };
-
-        await _s3.PutObjectAsync(request, cancellationToken);
-        return $"s3://{bucket}/{key}";
+        return await _objectStore.PutObjectTextAsync(
+            bucket,
+            key,
+            payload,
+            "application/json",
+            cancellationToken);
     }
 
     public Task<string?> StoreAsync(
@@ -86,15 +80,11 @@ public class ResultPayloadStore(IAmazonS3 s3, IOptions<ProviderWorkerOptions> op
 
         var key = $"{_options.ResultPrefix}{job.JobId}/{job.AttemptId}/{fileName}";
 
-        var request = new PutObjectRequest
-        {
-            BucketName = bucket,
-            Key = key,
-            ContentBody = payload,
-            ContentType = "application/json"
-        };
-
-        await _s3.PutObjectAsync(request, cancellationToken);
-        return $"s3://{bucket}/{key}";
+        return await _objectStore.PutObjectTextAsync(
+            bucket,
+            key,
+            payload,
+            "application/json",
+            cancellationToken);
     }
 }

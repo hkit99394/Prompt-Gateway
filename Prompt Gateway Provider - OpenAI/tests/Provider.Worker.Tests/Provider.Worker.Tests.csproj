@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Provider.Worker\Provider.Worker.csproj" />
+    <ProjectReference Include="..\..\src\Provider.Worker.Aws\Provider.Worker.Aws.csproj" />
   </ItemGroup>
 
 </Project>

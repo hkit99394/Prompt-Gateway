@@ -12,7 +12,8 @@
           "NSubstitute": "5.3.0",
           "NUnit": "4.3.2",
           "NUnit3TestAdapter": "5.0.0",
-          "Provider.Worker": "1.0.0"
+          "Provider.Worker": "1.0.0",
+          "Provider.Worker.Aws": "1.0.0"
         },
         "runtime": {
           "Provider.Worker.Tests.dll": {}
@@ -993,14 +994,26 @@
       },
       "Provider.Worker/1.0.0": {
         "dependencies": {
-          "AWSSDK.DynamoDBv2": "4.0.14",
-          "AWSSDK.S3": "4.0.18.3",
-          "AWSSDK.SQS": "4.0.2.14",
           "Microsoft.Extensions.Hosting": "8.0.1",
           "Microsoft.Extensions.Http": "10.0.2"
         },
         "runtime": {
           "Provider.Worker.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "Provider.Worker.Aws/1.0.0": {
+        "dependencies": {
+          "AWSSDK.DynamoDBv2": "4.0.14",
+          "AWSSDK.S3": "4.0.18.3",
+          "AWSSDK.SQS": "4.0.2.14",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.2",
+          "Provider.Worker": "1.0.0"
+        },
+        "runtime": {
+          "Provider.Worker.Aws.dll": {
             "assemblyVersion": "1.0.0.0",
             "fileVersion": "1.0.0.0"
           }
@@ -1351,6 +1364,11 @@
       "hashPath": "system.diagnostics.eventlog.8.0.1.nupkg.sha512"
     },
     "Provider.Worker/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Provider.Worker.Aws/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

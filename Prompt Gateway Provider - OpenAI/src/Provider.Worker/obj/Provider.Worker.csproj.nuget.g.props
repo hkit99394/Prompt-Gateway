@@ -4,21 +4,15 @@
     <RestoreSuccess Condition=" '$(RestoreSuccess)' == '' ">True</RestoreSuccess>
     <RestoreTool Condition=" '$(RestoreTool)' == '' ">NuGet</RestoreTool>
     <ProjectAssetsFile Condition=" '$(ProjectAssetsFile)' == '' ">$(MSBuildThisFileDirectory)project.assets.json</ProjectAssetsFile>
-    <NuGetPackageRoot Condition=" '$(NuGetPackageRoot)' == '' ">/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget</NuGetPackageRoot>
-    <NuGetPackageFolders Condition=" '$(NuGetPackageFolders)' == '' ">/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget</NuGetPackageFolders>
+    <NuGetPackageRoot Condition=" '$(NuGetPackageRoot)' == '' ">/Users/jacktam/.nuget/packages/</NuGetPackageRoot>
+    <NuGetPackageFolders Condition=" '$(NuGetPackageFolders)' == '' ">/Users/jacktam/.nuget/packages/</NuGetPackageFolders>
     <NuGetProjectStyle Condition=" '$(NuGetProjectStyle)' == '' ">PackageReference</NuGetProjectStyle>
     <NuGetToolVersion Condition=" '$(NuGetToolVersion)' == '' ">7.0.0</NuGetToolVersion>
   </PropertyGroup>
   <ItemGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
-    <SourceRoot Include="/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget/" />
+    <SourceRoot Include="/Users/jacktam/.nuget/packages/" />
   </ItemGroup>
   <ImportGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
-    <Import Project="$(NuGetPackageRoot)/microsoft.extensions.configuration.usersecrets/8.0.1/buildTransitive/net6.0/Microsoft.Extensions.Configuration.UserSecrets.props" Condition="Exists('$(NuGetPackageRoot)/microsoft.extensions.configuration.usersecrets/8.0.1/buildTransitive/net6.0/Microsoft.Extensions.Configuration.UserSecrets.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.extensions.configuration.usersecrets/8.0.1/buildTransitive/net6.0/Microsoft.Extensions.Configuration.UserSecrets.props" Condition="Exists('$(NuGetPackageRoot)microsoft.extensions.configuration.usersecrets/8.0.1/buildTransitive/net6.0/Microsoft.Extensions.Configuration.UserSecrets.props')" />
   </ImportGroup>
-  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
-    <PkgAWSSDK_Core Condition=" '$(PkgAWSSDK_Core)' == '' ">/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget/awssdk.core/4.0.3.12</PkgAWSSDK_Core>
-    <PkgAWSSDK_SQS Condition=" '$(PkgAWSSDK_SQS)' == '' ">/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget/awssdk.sqs/4.0.2.14</PkgAWSSDK_SQS>
-    <PkgAWSSDK_S3 Condition=" '$(PkgAWSSDK_S3)' == '' ">/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget/awssdk.s3/4.0.18.3</PkgAWSSDK_S3>
-    <PkgAWSSDK_DynamoDBv2 Condition=" '$(PkgAWSSDK_DynamoDBv2)' == '' ">/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget/awssdk.dynamodbv2/4.0.14</PkgAWSSDK_DynamoDBv2>
-  </PropertyGroup>
 </Project>

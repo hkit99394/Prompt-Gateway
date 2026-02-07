@@ -18,8 +18,14 @@ public class CanonicalJobRequest
     [JsonPropertyName("task_type")]
     public string TaskType { get; set; } = string.Empty;
 
+    [JsonPropertyName("prompt_key")]
+    public string? PromptKey { get; set; }
+
+    [JsonPropertyName("prompt_bucket")]
+    public string? PromptBucket { get; set; }
+
     [JsonPropertyName("prompt_s3_key")]
-    public string PromptS3Key { get; set; } = string.Empty;
+    public string? PromptS3Key { get; set; }
 
     [JsonPropertyName("prompt_s3_bucket")]
     public string? PromptS3Bucket { get; set; }
@@ -29,6 +35,12 @@ public class CanonicalJobRequest
 
     [JsonPropertyName("model")]
     public string? Model { get; set; }
+
+    [JsonPropertyName("prompt_input")]
+    public string? PromptInput { get; set; }
+
+    [JsonPropertyName("prompt_variables")]
+    public Dictionary<string, string>? PromptVariables { get; set; }
 
     [JsonPropertyName("parameters")]
     public OpenAiParameters? Parameters { get; set; }

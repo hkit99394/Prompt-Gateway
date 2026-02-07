@@ -1,4 +1,3 @@
-using Amazon.SQS.Model;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -14,15 +13,16 @@ public class WorkerTests
     public async Task RunAsync_ProcessesMessageAndDeletesIt()
     {
         var logger = Substitute.For<ILogger<Worker>>();
-        var sqs = Substitute.For<ISqsClient>();
+        var sqs = Substitute.For<IQueueClient>();
         var options = CreateOptions();
         var dedupe = Substitute.For<IDedupeStore>();
-        var promptLoader = Substitute.For<IPromptLoader>();
+        var templateStore = Substitute.For<IPromptTemplateStore>();
+        var promptBuilder = Substitute.For<IPromptBuilder>();
         var openAi = Substitute.For<IOpenAiClient>();
         var payloadStore = Substitute.For<IResultPayloadStore>();
         var publisher = Substitute.For<IResultPublisher>();
 
-        var message = new Message
+        var message = new QueueMessage
         {
             Body = """
                    { "job_id": "job-1", "attempt_id": "attempt-1", "task_type": "chat_completion", "prompt_s3_key": "prompts/job-1.txt" }
@@ -30,14 +30,16 @@ public class WorkerTests
             ReceiptHandle = "rh-1"
         };
 
-        sqs.ReceiveMessageAsync(Arg.Any<ReceiveMessageRequest>(), Arg.Any<CancellationToken>())
+        sqs.ReceiveMessageAsync(Arg.Any<QueueReceiveRequest>(), Arg.Any<CancellationToken>())
             .Returns(
-                new ReceiveMessageResponse { Messages = new List<Message> { message } },
-                new ReceiveMessageResponse());
+                new QueueReceiveResult { Messages = new List<QueueMessage> { message } },
+                new QueueReceiveResult());
 
         dedupe.TryStartAsync("job-1", "attempt-1", Arg.Any<CancellationToken>())
-            .Returns(true);
-        promptLoader.LoadPromptAsync(Arg.Any<CanonicalJobRequest>(), Arg.Any<CancellationToken>())
+            .Returns(DedupeDecision.Started);
+        templateStore.GetTemplateAsync(Arg.Any<CanonicalJobRequest>(), Arg.Any<CancellationToken>())
+            .Returns("template");
+        promptBuilder.BuildPrompt(Arg.Any<CanonicalJobRequest>(), "template")
             .Returns("prompt");
         openAi.ExecuteAsync(Arg.Any<CanonicalJobRequest>(), "prompt", Arg.Any<CancellationToken>())
             .Returns(new OpenAiResult
@@ -60,7 +62,8 @@ public class WorkerTests
             sqs,
             options,
             dedupe,
-            promptLoader,
+            templateStore,
+            promptBuilder,
             openAi,
             payloadStore,
             publisher);
@@ -83,15 +86,16 @@ public class WorkerTests
     public async Task RunAsync_RejectsUnsupportedTaskType()
     {
         var logger = Substitute.For<ILogger<Worker>>();
-        var sqs = Substitute.For<ISqsClient>();
+        var sqs = Substitute.For<IQueueClient>();
         var options = CreateOptions();
         var dedupe = Substitute.For<IDedupeStore>();
-        var promptLoader = Substitute.For<IPromptLoader>();
+        var templateStore = Substitute.For<IPromptTemplateStore>();
+        var promptBuilder = Substitute.For<IPromptBuilder>();
         var openAi = Substitute.For<IOpenAiClient>();
         var payloadStore = Substitute.For<IResultPayloadStore>();
         var publisher = Substitute.For<IResultPublisher>();
 
-        var message = new Message
+        var message = new QueueMessage
         {
             Body = """
                    { "job_id": "job-2", "attempt_id": "attempt-2", "task_type": "image", "prompt_s3_key": "prompts/job-2.txt" }
@@ -99,13 +103,13 @@ public class WorkerTests
             ReceiptHandle = "rh-2"
         };
 
-        sqs.ReceiveMessageAsync(Arg.Any<ReceiveMessageRequest>(), Arg.Any<CancellationToken>())
+        sqs.ReceiveMessageAsync(Arg.Any<QueueReceiveRequest>(), Arg.Any<CancellationToken>())
             .Returns(
-                new ReceiveMessageResponse { Messages = new List<Message> { message } },
-                new ReceiveMessageResponse());
+                new QueueReceiveResult { Messages = new List<QueueMessage> { message } },
+                new QueueReceiveResult());
 
         dedupe.TryStartAsync("job-2", "attempt-2", Arg.Any<CancellationToken>())
-            .Returns(true);
+            .Returns(DedupeDecision.Started);
 
         var published = new TaskCompletionSource();
         publisher.PublishAsync(Arg.Any<ResultEvent>(), Arg.Any<CancellationToken>())
@@ -120,7 +124,8 @@ public class WorkerTests
             sqs,
             options,
             dedupe,
-            promptLoader,
+            templateStore,
+            promptBuilder,
             openAi,
             payloadStore,
             publisher);
@@ -145,31 +150,33 @@ public class WorkerTests
     public async Task RunAsync_DeletesInvalidPayload()
     {
         var logger = Substitute.For<ILogger<Worker>>();
-        var sqs = Substitute.For<ISqsClient>();
+        var sqs = Substitute.For<IQueueClient>();
         var options = CreateOptions();
         var dedupe = Substitute.For<IDedupeStore>();
-        var promptLoader = Substitute.For<IPromptLoader>();
+        var templateStore = Substitute.For<IPromptTemplateStore>();
+        var promptBuilder = Substitute.For<IPromptBuilder>();
         var openAi = Substitute.For<IOpenAiClient>();
         var payloadStore = Substitute.For<IResultPayloadStore>();
         var publisher = Substitute.For<IResultPublisher>();
 
-        var message = new Message
+        var message = new QueueMessage
         {
             Body = """{ "job_id": "", "attempt_id": "" }""",
             ReceiptHandle = "rh-3"
         };
 
-        sqs.ReceiveMessageAsync(Arg.Any<ReceiveMessageRequest>(), Arg.Any<CancellationToken>())
+        sqs.ReceiveMessageAsync(Arg.Any<QueueReceiveRequest>(), Arg.Any<CancellationToken>())
             .Returns(
-                new ReceiveMessageResponse { Messages = new List<Message> { message } },
-                new ReceiveMessageResponse());
+                new QueueReceiveResult { Messages = new List<QueueMessage> { message } },
+                new QueueReceiveResult());
 
         var worker = new Worker(
             logger,
             sqs,
             options,
             dedupe,
-            promptLoader,
+            templateStore,
+            promptBuilder,
             openAi,
             payloadStore,
             publisher);
@@ -195,15 +202,16 @@ public class WorkerTests
     public async Task RunAsync_DedupedMessageIsDeleted()
     {
         var logger = Substitute.For<ILogger<Worker>>();
-        var sqs = Substitute.For<ISqsClient>();
+        var sqs = Substitute.For<IQueueClient>();
         var options = CreateOptions();
         var dedupe = Substitute.For<IDedupeStore>();
-        var promptLoader = Substitute.For<IPromptLoader>();
+        var templateStore = Substitute.For<IPromptTemplateStore>();
+        var promptBuilder = Substitute.For<IPromptBuilder>();
         var openAi = Substitute.For<IOpenAiClient>();
         var payloadStore = Substitute.For<IResultPayloadStore>();
         var publisher = Substitute.For<IResultPublisher>();
 
-        var message = new Message
+        var message = new QueueMessage
         {
             Body = """
                    { "job_id": "job-4", "attempt_id": "attempt-4", "task_type": "chat_completion", "prompt_s3_key": "prompts/job-4.txt" }
@@ -211,20 +219,21 @@ public class WorkerTests
             ReceiptHandle = "rh-4"
         };
 
-        sqs.ReceiveMessageAsync(Arg.Any<ReceiveMessageRequest>(), Arg.Any<CancellationToken>())
+        sqs.ReceiveMessageAsync(Arg.Any<QueueReceiveRequest>(), Arg.Any<CancellationToken>())
             .Returns(
-                new ReceiveMessageResponse { Messages = new List<Message> { message } },
-                new ReceiveMessageResponse());
+                new QueueReceiveResult { Messages = new List<QueueMessage> { message } },
+                new QueueReceiveResult());
 
         dedupe.TryStartAsync("job-4", "attempt-4", Arg.Any<CancellationToken>())
-            .Returns(false);
+            .Returns(DedupeDecision.DuplicateCompleted);
 
         var worker = new Worker(
             logger,
             sqs,
             options,
             dedupe,
-            promptLoader,
+            templateStore,
+            promptBuilder,
             openAi,
             payloadStore,
             publisher);

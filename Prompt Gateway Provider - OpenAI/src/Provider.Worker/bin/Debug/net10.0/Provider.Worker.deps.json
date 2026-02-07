@@ -8,55 +8,11 @@
     ".NETCoreApp,Version=v10.0": {
       "Provider.Worker/1.0.0": {
         "dependencies": {
-          "AWSSDK.DynamoDBv2": "4.0.14",
-          "AWSSDK.S3": "4.0.18.3",
-          "AWSSDK.SQS": "4.0.2.14",
           "Microsoft.Extensions.Hosting": "8.0.1",
           "Microsoft.Extensions.Http": "10.0.2"
         },
         "runtime": {
           "Provider.Worker.dll": {}
-        }
-      },
-      "AWSSDK.Core/4.0.3.12": {
-        "runtime": {
-          "lib/net8.0/AWSSDK.Core.dll": {
-            "assemblyVersion": "4.0.0.0",
-            "fileVersion": "4.0.3.12"
-          }
-        }
-      },
-      "AWSSDK.DynamoDBv2/4.0.14": {
-        "dependencies": {
-          "AWSSDK.Core": "4.0.3.12"
-        },
-        "runtime": {
-          "lib/net8.0/AWSSDK.DynamoDBv2.dll": {
-            "assemblyVersion": "4.0.0.0",
-            "fileVersion": "4.0.14.0"
-          }
-        }
-      },
-      "AWSSDK.S3/4.0.18.3": {
-        "dependencies": {
-          "AWSSDK.Core": "4.0.3.12"
-        },
-        "runtime": {
-          "lib/net8.0/AWSSDK.S3.dll": {
-            "assemblyVersion": "4.0.0.0",
-            "fileVersion": "4.0.18.3"
-          }
-        }
-      },
-      "AWSSDK.SQS/4.0.2.14": {
-        "dependencies": {
-          "AWSSDK.Core": "4.0.3.12"
-        },
-        "runtime": {
-          "lib/net8.0/AWSSDK.SQS.dll": {
-            "assemblyVersion": "4.0.0.0",
-            "fileVersion": "4.0.2.14"
-          }
         }
       },
       "Microsoft.Extensions.Configuration/10.0.2": {
@@ -464,34 +420,6 @@
       "type": "project",
       "serviceable": false,
       "sha512": ""
-    },
-    "AWSSDK.Core/4.0.3.12": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-/FyE96xV2qJLgJN++ZW8M7udRf2NBLoku9AkEHLQqpH9uv0r0QQK2sw2pF3OvzKnuKsyp+Mx5wYwgFXPLnBb9g==",
-      "path": "awssdk.core/4.0.3.12",
-      "hashPath": "awssdk.core.4.0.3.12.nupkg.sha512"
-    },
-    "AWSSDK.DynamoDBv2/4.0.14": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-M007wRM1sM8QNal0oFPdbNM3BJrqQ3F8b3qOITvANnyrbHDZMM7otkp/M93pBajcqTaOlEQXFNNd14m6+1YuHA==",
-      "path": "awssdk.dynamodbv2/4.0.14",
-      "hashPath": "awssdk.dynamodbv2.4.0.14.nupkg.sha512"
-    },
-    "AWSSDK.S3/4.0.18.3": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-SOx6ToXt5Kb7HNG4Lg2NRpRTM6VtTvZDjUqlC8xbIT7DtwquXI6gSquLDxQ2cD5dIKDl4X2eVy9sxDg+ANtSsg==",
-      "path": "awssdk.s3/4.0.18.3",
-      "hashPath": "awssdk.s3.4.0.18.3.nupkg.sha512"
-    },
-    "AWSSDK.SQS/4.0.2.14": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-8/fqTVBkIYZOJkxIte0cqLUQoyEh6EUqU+UIzFG7dby4+WP9x6dIpea8ZQP+VSrnhC+WQ0j3HwnpWd2R+w+W/g==",
-      "path": "awssdk.sqs/4.0.2.14",
-      "hashPath": "awssdk.sqs.4.0.2.14.nupkg.sha512"
     },
     "Microsoft.Extensions.Configuration/10.0.2": {
       "type": "package",

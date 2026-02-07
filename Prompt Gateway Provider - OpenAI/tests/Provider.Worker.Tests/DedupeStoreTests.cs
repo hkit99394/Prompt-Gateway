@@ -2,6 +2,7 @@ using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Provider.Worker.Aws;
 using Provider.Worker.Options;
 using Provider.Worker.Services;
 
@@ -23,12 +24,12 @@ public class DedupeStoreTests
         var first = await store.TryStartAsync("job-1", "attempt-1", CancellationToken.None);
         var second = await store.TryStartAsync("job-1", "attempt-1", CancellationToken.None);
 
-        Assert.That(first, Is.True);
-        Assert.That(second, Is.False);
+        Assert.That(first, Is.EqualTo(DedupeDecision.Started));
+        Assert.That(second, Is.EqualTo(DedupeDecision.DuplicateInProgress));
     }
 
     [Test]
-    public async Task TryStartAsync_ReturnsFalseOnConditionalCheckFailure()
+    public async Task TryStartAsync_ReturnsDuplicateCompletedOnConditionalCheckFailure()
     {
         var logger = Substitute.For<ILogger<DedupeStore>>();
         var dynamo = Substitute.For<IAmazonDynamoDB>();
@@ -41,10 +42,18 @@ public class DedupeStoreTests
         dynamo.PutItemAsync(Arg.Any<PutItemRequest>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromException<PutItemResponse>(
                 new ConditionalCheckFailedException("exists")));
+        dynamo.GetItemAsync(Arg.Any<GetItemRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new GetItemResponse
+            {
+                Item = new Dictionary<string, AttributeValue>
+                {
+                    ["status"] = new AttributeValue { S = "completed" }
+                }
+            });
 
         var result = await store.TryStartAsync("job-2", "attempt-2", CancellationToken.None);
 
-        Assert.That(result, Is.False);
+        Assert.That(result, Is.EqualTo(DedupeDecision.DuplicateCompleted));
     }
 
     [Test]
@@ -64,8 +73,8 @@ public class DedupeStoreTests
         var first = await store.TryStartAsync("job-3", "attempt-3", CancellationToken.None);
         var second = await store.TryStartAsync("job-3", "attempt-3", CancellationToken.None);
 
-        Assert.That(first, Is.True);
-        Assert.That(second, Is.False);
+        Assert.That(first, Is.EqualTo(DedupeDecision.Started));
+        Assert.That(second, Is.EqualTo(DedupeDecision.DuplicateInProgress));
     }
 
     [Test]

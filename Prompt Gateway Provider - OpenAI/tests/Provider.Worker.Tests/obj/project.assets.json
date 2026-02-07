@@ -1340,9 +1340,6 @@
         "type": "project",
         "framework": ".NETCoreApp,Version=v10.0",
         "dependencies": {
-          "AWSSDK.DynamoDBv2": "4.0.14",
-          "AWSSDK.S3": "4.0.18.3",
-          "AWSSDK.SQS": "4.0.2.14",
           "Microsoft.Extensions.Hosting": "8.0.1",
           "Microsoft.Extensions.Http": "10.0.2"
         },
@@ -1351,6 +1348,23 @@
         },
         "runtime": {
           "bin/placeholder/Provider.Worker.dll": {}
+        }
+      },
+      "Provider.Worker.Aws/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v10.0",
+        "dependencies": {
+          "AWSSDK.DynamoDBv2": "4.0.14",
+          "AWSSDK.S3": "4.0.18.3",
+          "AWSSDK.SQS": "4.0.2.14",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.2",
+          "Provider.Worker": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/Provider.Worker.Aws.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Provider.Worker.Aws.dll": {}
         }
       }
     }
@@ -3347,6 +3361,11 @@
       "type": "project",
       "path": "../../src/Provider.Worker/Provider.Worker.csproj",
       "msbuildProject": "../../src/Provider.Worker/Provider.Worker.csproj"
+    },
+    "Provider.Worker.Aws/1.0.0": {
+      "type": "project",
+      "path": "../../src/Provider.Worker.Aws/Provider.Worker.Aws.csproj",
+      "msbuildProject": "../../src/Provider.Worker.Aws/Provider.Worker.Aws.csproj"
     }
   },
   "projectFileDependencyGroups": {
@@ -3357,11 +3376,12 @@
       "NUnit.Analyzers >= 4.7.0",
       "NUnit3TestAdapter >= 5.0.0",
       "Provider.Worker >= 1.0.0",
+      "Provider.Worker.Aws >= 1.0.0",
       "coverlet.collector >= 6.0.4"
     ]
   },
   "packageFolders": {
-    "/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget": {}
+    "/Users/jacktam/.nuget/packages/": {}
   },
   "project": {
     "version": "1.0.0",
@@ -3369,7 +3389,7 @@
       "projectUniqueName": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/Provider.Worker.Tests.csproj",
       "projectName": "Provider.Worker.Tests",
       "projectPath": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/Provider.Worker.Tests.csproj",
-      "packagesPath": "/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget",
+      "packagesPath": "/Users/jacktam/.nuget/packages/",
       "outputPath": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
@@ -3385,6 +3405,9 @@
         "net10.0": {
           "targetAlias": "net10.0",
           "projectReferences": {
+            "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/src/Provider.Worker.Aws/Provider.Worker.Aws.csproj": {
+              "projectPath": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/src/Provider.Worker.Aws/Provider.Worker.Aws.csproj"
+            },
             "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/src/Provider.Worker/Provider.Worker.csproj": {
               "projectPath": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/src/Provider.Worker/Provider.Worker.csproj"
             }
