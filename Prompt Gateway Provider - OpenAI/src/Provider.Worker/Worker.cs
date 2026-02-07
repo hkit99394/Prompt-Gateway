@@ -264,6 +264,16 @@ public class Worker : BackgroundService
         if (openAiResult is null)
         {
             _logger.LogWarning("OpenAI result missing.");
+            var published = await PublishErrorAsync(
+                job,
+                CanonicalError.Create("provider_error", "OpenAI result missing."),
+                stoppingToken);
+            if (!published)
+            {
+                return;
+            }
+            await _dedupeStore.MarkCompletedAsync(job.JobId, job.AttemptId, stoppingToken);
+            await DeleteMessageAsync(message, stoppingToken);
             return;
         }
 
