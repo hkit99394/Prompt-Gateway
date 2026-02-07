@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <RestoreSuccess Condition=" '$(RestoreSuccess)' == '' ">True</RestoreSuccess>
+    <RestoreTool Condition=" '$(RestoreTool)' == '' ">NuGet</RestoreTool>
+    <ProjectAssetsFile Condition=" '$(ProjectAssetsFile)' == '' ">$(MSBuildThisFileDirectory)project.assets.json</ProjectAssetsFile>
+    <NuGetPackageRoot Condition=" '$(NuGetPackageRoot)' == '' ">/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget</NuGetPackageRoot>
+    <NuGetPackageFolders Condition=" '$(NuGetPackageFolders)' == '' ">/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget</NuGetPackageFolders>
+    <NuGetProjectStyle Condition=" '$(NuGetProjectStyle)' == '' ">PackageReference</NuGetProjectStyle>
+    <NuGetToolVersion Condition=" '$(NuGetToolVersion)' == '' ">7.0.0</NuGetToolVersion>
+  </PropertyGroup>
+  <ItemGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <SourceRoot Include="/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget/" />
+  </ItemGroup>
+  <ImportGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <Import Project="$(NuGetPackageRoot)/microsoft.extensions.configuration.usersecrets/8.0.1/buildTransitive/net6.0/Microsoft.Extensions.Configuration.UserSecrets.props" Condition="Exists('$(NuGetPackageRoot)/microsoft.extensions.configuration.usersecrets/8.0.1/buildTransitive/net6.0/Microsoft.Extensions.Configuration.UserSecrets.props')" />
+    <Import Project="$(NuGetPackageRoot)/microsoft.testing.platform/1.5.3/buildTransitive/net9.0/Microsoft.Testing.Platform.props" Condition="Exists('$(NuGetPackageRoot)/microsoft.testing.platform/1.5.3/buildTransitive/net9.0/Microsoft.Testing.Platform.props')" />
+    <Import Project="$(NuGetPackageRoot)/microsoft.testing.platform.msbuild/1.5.3/buildTransitive/Microsoft.Testing.Platform.MSBuild.props" Condition="Exists('$(NuGetPackageRoot)/microsoft.testing.platform.msbuild/1.5.3/buildTransitive/Microsoft.Testing.Platform.MSBuild.props')" />
+    <Import Project="$(NuGetPackageRoot)/microsoft.testing.extensions.telemetry/1.5.3/buildTransitive/net9.0/Microsoft.Testing.Extensions.Telemetry.props" Condition="Exists('$(NuGetPackageRoot)/microsoft.testing.extensions.telemetry/1.5.3/buildTransitive/net9.0/Microsoft.Testing.Extensions.Telemetry.props')" />
+    <Import Project="$(NuGetPackageRoot)/nunit3testadapter/5.0.0/build/netcoreapp3.1/NUnit3TestAdapter.props" Condition="Exists('$(NuGetPackageRoot)/nunit3testadapter/5.0.0/build/netcoreapp3.1/NUnit3TestAdapter.props')" />
+    <Import Project="$(NuGetPackageRoot)/nunit/4.3.2/build/NUnit.props" Condition="Exists('$(NuGetPackageRoot)/nunit/4.3.2/build/NUnit.props')" />
+    <Import Project="$(NuGetPackageRoot)/microsoft.testplatform.testhost/17.14.0/build/net8.0/Microsoft.TestPlatform.TestHost.props" Condition="Exists('$(NuGetPackageRoot)/microsoft.testplatform.testhost/17.14.0/build/net8.0/Microsoft.TestPlatform.TestHost.props')" />
+    <Import Project="$(NuGetPackageRoot)/microsoft.codecoverage/17.14.0/build/netstandard2.0/Microsoft.CodeCoverage.props" Condition="Exists('$(NuGetPackageRoot)/microsoft.codecoverage/17.14.0/build/netstandard2.0/Microsoft.CodeCoverage.props')" />
+    <Import Project="$(NuGetPackageRoot)/microsoft.net.test.sdk/17.14.0/build/net8.0/Microsoft.NET.Test.Sdk.props" Condition="Exists('$(NuGetPackageRoot)/microsoft.net.test.sdk/17.14.0/build/net8.0/Microsoft.NET.Test.Sdk.props')" />
+  </ImportGroup>
+  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <PkgAWSSDK_Core Condition=" '$(PkgAWSSDK_Core)' == '' ">/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget/awssdk.core/4.0.3.12</PkgAWSSDK_Core>
+    <PkgAWSSDK_SQS Condition=" '$(PkgAWSSDK_SQS)' == '' ">/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget/awssdk.sqs/4.0.2.14</PkgAWSSDK_SQS>
+    <PkgAWSSDK_S3 Condition=" '$(PkgAWSSDK_S3)' == '' ">/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget/awssdk.s3/4.0.18.3</PkgAWSSDK_S3>
+    <PkgAWSSDK_DynamoDBv2 Condition=" '$(PkgAWSSDK_DynamoDBv2)' == '' ">/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget/awssdk.dynamodbv2/4.0.14</PkgAWSSDK_DynamoDBv2>
+  </PropertyGroup>
+</Project>

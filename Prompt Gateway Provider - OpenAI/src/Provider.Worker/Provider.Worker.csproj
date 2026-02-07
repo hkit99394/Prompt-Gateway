@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-Provider.Worker-e053b4c3-42b9-4dfe-86d4-852df106a94e</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.0.14" />
+    <PackageReference Include="AWSSDK.S3" Version="4.0.18.3" />
+    <PackageReference Include="AWSSDK.SQS" Version="4.0.2.14" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.2" />
+  </ItemGroup>
+</Project>

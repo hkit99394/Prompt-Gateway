@@ -1,0 +1,60 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Prompt Gateway Provider - OpenAI", "Prompt Gateway Provider - OpenAI", "{6A0875A8-77EC-4909-A2B4-EAF4A8603E11}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{5E3E8F38-8B16-438C-BAD6-277F0F9311B2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Provider.Worker", "Prompt Gateway Provider - OpenAI\src\Provider.Worker\Provider.Worker.csproj", "{786F082C-4D25-46FB-9DF5-B9E51FB889F9}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{8A32BAD4-28F9-67DB-2818-7EF0A9E32998}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Provider.Worker.Tests", "Prompt Gateway Provider - OpenAI\tests\Provider.Worker.Tests\Provider.Worker.Tests.csproj", "{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9}.Debug|x64.Build.0 = Debug|Any CPU
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9}.Debug|x86.Build.0 = Debug|Any CPU
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9}.Release|x64.ActiveCfg = Release|Any CPU
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9}.Release|x64.Build.0 = Release|Any CPU
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9}.Release|x86.ActiveCfg = Release|Any CPU
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9}.Release|x86.Build.0 = Release|Any CPU
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}.Debug|x64.Build.0 = Debug|Any CPU
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}.Debug|x86.Build.0 = Debug|Any CPU
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}.Release|x64.ActiveCfg = Release|Any CPU
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}.Release|x64.Build.0 = Release|Any CPU
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}.Release|x86.ActiveCfg = Release|Any CPU
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{5E3E8F38-8B16-438C-BAD6-277F0F9311B2} = {6A0875A8-77EC-4909-A2B4-EAF4A8603E11}
+		{786F082C-4D25-46FB-9DF5-B9E51FB889F9} = {5E3E8F38-8B16-438C-BAD6-277F0F9311B2}
+		{8A32BAD4-28F9-67DB-2818-7EF0A9E32998} = {6A0875A8-77EC-4909-A2B4-EAF4A8603E11}
+		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB} = {8A32BAD4-28F9-67DB-2818-7EF0A9E32998}
+	EndGlobalSection
+EndGlobal
