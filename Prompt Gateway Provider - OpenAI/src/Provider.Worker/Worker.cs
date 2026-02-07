@@ -187,10 +187,14 @@ public class Worker : BackgroundService
 
         if (!string.Equals(job.TaskType, CanonicalTaskTypes.ChatCompletion, StringComparison.OrdinalIgnoreCase))
         {
-            await PublishErrorAsync(
+            var published = await PublishErrorAsync(
                 job,
                 CanonicalError.Create("unsupported_task", $"Unsupported task type: {job.TaskType}"),
                 stoppingToken);
+            if (!published)
+            {
+                return;
+            }
             await _dedupeStore.MarkCompletedAsync(job.JobId, job.AttemptId, stoppingToken);
             await DeleteMessageAsync(message, stoppingToken);
             return;
@@ -204,10 +208,14 @@ public class Worker : BackgroundService
         }
         catch (Exception ex)
         {
-            await PublishErrorAsync(
+            var published = await PublishErrorAsync(
                 job,
                 CanonicalError.Create("prompt_load_failed", ex.Message),
                 stoppingToken);
+            if (!published)
+            {
+                return;
+            }
             await _dedupeStore.MarkCompletedAsync(job.JobId, job.AttemptId, stoppingToken);
             await DeleteMessageAsync(message, stoppingToken);
             return;
@@ -224,14 +232,25 @@ public class Worker : BackgroundService
         catch (OpenAiException ex)
         {
             var error = CanonicalError.FromOpenAi(ex);
-            await PublishErrorAsync(job, error, stoppingToken, ex.RawPayload);
+            var published = await PublishErrorAsync(job, error, stoppingToken, ex.RawPayload);
+            if (!published)
+            {
+                return;
+            }
             await _dedupeStore.MarkCompletedAsync(job.JobId, job.AttemptId, stoppingToken);
             await DeleteMessageAsync(message, stoppingToken);
             return;
         }
         catch (Exception ex)
         {
-            await PublishErrorAsync(job, CanonicalError.Create("provider_error", ex.Message), stoppingToken);
+            var published = await PublishErrorAsync(
+                job,
+                CanonicalError.Create("provider_error", ex.Message),
+                stoppingToken);
+            if (!published)
+            {
+                return;
+            }
             await _dedupeStore.MarkCompletedAsync(job.JobId, job.AttemptId, stoppingToken);
             await DeleteMessageAsync(message, stoppingToken);
             return;
@@ -267,12 +286,20 @@ public class Worker : BackgroundService
 
         var resultEvent = ResultEvent.Success(job, responsePayload);
         resultEvent.Provider = _options.ProviderName;
-        await _publisher.PublishAsync(resultEvent, stoppingToken);
+        try
+        {
+            await _publisher.PublishAsync(resultEvent, stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish result.");
+            return;
+        }
         await _dedupeStore.MarkCompletedAsync(job.JobId, job.AttemptId, stoppingToken);
         await DeleteMessageAsync(message, stoppingToken);
     }
 
-    private async Task PublishErrorAsync(
+    private async Task<bool> PublishErrorAsync(
         CanonicalJobRequest job,
         CanonicalError error,
         CancellationToken stoppingToken,
@@ -280,16 +307,32 @@ public class Worker : BackgroundService
     {
         if (!string.IsNullOrWhiteSpace(rawPayload))
         {
-            error.RawPayloadReference = await _payloadStore.StoreAsync(
-                job,
-                rawPayload,
-                "error.json",
-                stoppingToken);
+            try
+            {
+                error.RawPayloadReference = await _payloadStore.StoreAsync(
+                    job,
+                    rawPayload,
+                    "error.json",
+                    stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to store error payload.");
+            }
         }
 
         var resultEvent = ResultEvent.Failure(job, error);
         resultEvent.Provider = _options.ProviderName;
-        await _publisher.PublishAsync(resultEvent, stoppingToken);
+        try
+        {
+            await _publisher.PublishAsync(resultEvent, stoppingToken);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish error result.");
+            return false;
+        }
     }
 
     private Task DeleteMessageAsync(QueueMessage message, CancellationToken stoppingToken)

@@ -36,7 +36,7 @@ public class ResultPayloadStore(IObjectStore objectStore, IOptions<ProviderWorke
         }
 
         var bucket = string.IsNullOrWhiteSpace(_options.ResultBucket)
-            ? job.PromptS3Bucket ?? _options.PromptBucket
+            ? _options.PromptBucket
             : _options.ResultBucket;
 
         if (string.IsNullOrWhiteSpace(bucket))
@@ -70,7 +70,7 @@ public class ResultPayloadStore(IObjectStore objectStore, IOptions<ProviderWorke
         CancellationToken cancellationToken)
     {
         var bucket = string.IsNullOrWhiteSpace(_options.ResultBucket)
-            ? job.PromptS3Bucket ?? _options.PromptBucket
+            ? _options.PromptBucket
             : _options.ResultBucket;
 
         if (string.IsNullOrWhiteSpace(bucket))

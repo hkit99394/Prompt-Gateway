@@ -317,6 +317,74 @@ public class WorkerTests
         await dedupe.Received(1).MarkCompletedAsync("job-5", "attempt-5", Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task RunAsync_DoesNotDeleteMessageWhenPublishFails()
+    {
+        var logger = Substitute.For<ILogger<Worker>>();
+        var sqs = Substitute.For<IQueueClient>();
+        var options = CreateOptions();
+        var dedupe = Substitute.For<IDedupeStore>();
+        var templateStore = Substitute.For<IPromptTemplateStore>();
+        var promptBuilder = Substitute.For<IPromptBuilder>();
+        var openAi = Substitute.For<IOpenAiClient>();
+        var payloadStore = Substitute.For<IResultPayloadStore>();
+        var publisher = Substitute.For<IResultPublisher>();
+
+        var message = new QueueMessage
+        {
+            Body = """
+                   { "job_id": "job-6", "attempt_id": "attempt-6", "task_type": "chat_completion", "prompt_s3_key": "prompts/job-6.txt" }
+                   """,
+            ReceiptHandle = "rh-6"
+        };
+
+        sqs.ReceiveMessageAsync(Arg.Any<QueueReceiveRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new QueueReceiveResult { Messages = new List<QueueMessage> { message } },
+                new QueueReceiveResult());
+
+        dedupe.TryStartAsync("job-6", "attempt-6", Arg.Any<CancellationToken>())
+            .Returns(DedupeDecision.Started);
+        templateStore.GetTemplateAsync(Arg.Any<CanonicalJobRequest>(), Arg.Any<CancellationToken>())
+            .Returns("template");
+        promptBuilder.BuildPrompt(Arg.Any<CanonicalJobRequest>(), "template")
+            .Returns("prompt");
+        openAi.ExecuteAsync(Arg.Any<CanonicalJobRequest>(), "prompt", Arg.Any<CancellationToken>())
+            .Returns(new OpenAiResult
+            {
+                Content = "ok",
+                Model = "gpt-test",
+                Usage = new UsageMetrics { TotalTokens = 1 }
+            });
+        publisher.PublishAsync(Arg.Any<ResultEvent>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromException(new Exception("publish failed")));
+
+        var worker = new Worker(
+            logger,
+            sqs,
+            options,
+            dedupe,
+            templateStore,
+            promptBuilder,
+            openAi,
+            payloadStore,
+            publisher);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var runTask = worker.RunAsync(cts.Token);
+
+        await Task.Delay(100);
+        cts.Cancel();
+        await runTask;
+
+        await sqs.DidNotReceive().DeleteMessageAsync(
+            options.Value.InputQueueUrl,
+            "rh-6",
+            Arg.Any<CancellationToken>());
+        await dedupe.DidNotReceive()
+            .MarkCompletedAsync("job-6", "attempt-6", Arg.Any<CancellationToken>());
+    }
+
     private static IOptions<ProviderWorkerOptions> CreateOptions()
     {
         return TestOptions.Create(new ProviderWorkerOptions
