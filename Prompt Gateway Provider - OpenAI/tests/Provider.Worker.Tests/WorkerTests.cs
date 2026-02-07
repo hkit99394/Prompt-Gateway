@@ -253,6 +253,70 @@ public class WorkerTests
             .PublishAsync(Arg.Any<ResultEvent>(), Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task RunAsync_PublishesErrorWhenPromptLoadFails()
+    {
+        var logger = Substitute.For<ILogger<Worker>>();
+        var sqs = Substitute.For<IQueueClient>();
+        var options = CreateOptions();
+        var dedupe = Substitute.For<IDedupeStore>();
+        var templateStore = Substitute.For<IPromptTemplateStore>();
+        var promptBuilder = Substitute.For<IPromptBuilder>();
+        var openAi = Substitute.For<IOpenAiClient>();
+        var payloadStore = Substitute.For<IResultPayloadStore>();
+        var publisher = Substitute.For<IResultPublisher>();
+
+        var message = new QueueMessage
+        {
+            Body = """
+                   { "job_id": "job-5", "attempt_id": "attempt-5", "task_type": "chat_completion", "prompt_s3_key": "prompts/job-5.txt" }
+                   """,
+            ReceiptHandle = "rh-5"
+        };
+
+        sqs.ReceiveMessageAsync(Arg.Any<QueueReceiveRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new QueueReceiveResult { Messages = new List<QueueMessage> { message } },
+                new QueueReceiveResult());
+
+        dedupe.TryStartAsync("job-5", "attempt-5", Arg.Any<CancellationToken>())
+            .Returns(DedupeDecision.Started);
+        templateStore.GetTemplateAsync(Arg.Any<CanonicalJobRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<string>(new InvalidOperationException("boom")));
+
+        ResultEvent? captured = null;
+        publisher.PublishAsync(Arg.Do<ResultEvent>(evt => captured = evt), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var worker = new Worker(
+            logger,
+            sqs,
+            options,
+            dedupe,
+            templateStore,
+            promptBuilder,
+            openAi,
+            payloadStore,
+            publisher);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var runTask = worker.RunAsync(cts.Token);
+
+        await Task.Delay(100);
+        cts.Cancel();
+        await runTask;
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.Status, Is.EqualTo("failed"));
+        await openAi.DidNotReceive()
+            .ExecuteAsync(Arg.Any<CanonicalJobRequest>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await sqs.Received(1).DeleteMessageAsync(
+            options.Value.InputQueueUrl,
+            "rh-5",
+            Arg.Any<CancellationToken>());
+        await dedupe.Received(1).MarkCompletedAsync("job-5", "attempt-5", Arg.Any<CancellationToken>());
+    }
+
     private static IOptions<ProviderWorkerOptions> CreateOptions()
     {
         return TestOptions.Create(new ProviderWorkerOptions

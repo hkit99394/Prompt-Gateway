@@ -10,7 +10,7 @@
         "projectUniqueName": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/src/Provider.Worker.Aws/Provider.Worker.Aws.csproj",
         "projectName": "Provider.Worker.Aws",
         "projectPath": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/src/Provider.Worker.Aws/Provider.Worker.Aws.csproj",
-        "packagesPath": "/Users/jacktam/.nuget/packages/",
+        "packagesPath": "/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget",
         "outputPath": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/src/Provider.Worker.Aws/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
@@ -365,7 +365,7 @@
         "projectUniqueName": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/src/Provider.Worker/Provider.Worker.csproj",
         "projectName": "Provider.Worker",
         "projectPath": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/src/Provider.Worker/Provider.Worker.csproj",
-        "packagesPath": "/Users/jacktam/.nuget/packages/",
+        "packagesPath": "/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget",
         "outputPath": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/src/Provider.Worker/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
@@ -708,7 +708,7 @@
         "projectUniqueName": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/Provider.Worker.Tests.csproj",
         "projectName": "Provider.Worker.Tests",
         "projectPath": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/Provider.Worker.Tests.csproj",
-        "packagesPath": "/Users/jacktam/.nuget/packages/",
+        "packagesPath": "/var/folders/py/6g0jns_s78vg8tzpvpdtxn9c0000gn/T/cursor-sandbox-cache/13c72810ac46e7e1b5955f3d981f8cef/nuget",
         "outputPath": "/Users/jacktam/Documents/Project/Prompt Gateway/Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [

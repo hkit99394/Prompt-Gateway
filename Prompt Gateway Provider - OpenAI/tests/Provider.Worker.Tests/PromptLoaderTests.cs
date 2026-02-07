@@ -69,4 +69,45 @@ public class PromptTemplateStoreTests
 
         Assert.That(result, Is.EqualTo("hello world"));
     }
+
+    [Test]
+    public void GetTemplateAsync_ThrowsWhenBucketOverrideIsNotAllowed()
+    {
+        var store = Substitute.For<IObjectStore>();
+        var options = TestOptions.Create(new ProviderWorkerOptions
+        {
+            PromptBucket = "bucket-a"
+        });
+        var templateStore = new PromptTemplateStore(store, options);
+
+        var job = new CanonicalJobRequest
+        {
+            PromptBucket = "bucket-b",
+            PromptS3Key = "prompts/job.txt"
+        };
+
+        Assert.That(
+            async () => await templateStore.GetTemplateAsync(job, CancellationToken.None),
+            Throws.TypeOf<InvalidOperationException>().With.Message.EqualTo("Prompt bucket override is not allowed."));
+    }
+
+    [Test]
+    public void GetTemplateAsync_ThrowsWhenPromptKeyIsInvalid()
+    {
+        var store = Substitute.For<IObjectStore>();
+        var options = TestOptions.Create(new ProviderWorkerOptions
+        {
+            PromptBucket = "bucket"
+        });
+        var templateStore = new PromptTemplateStore(store, options);
+
+        var job = new CanonicalJobRequest
+        {
+            PromptS3Key = "../secrets.txt"
+        };
+
+        Assert.That(
+            async () => await templateStore.GetTemplateAsync(job, CancellationToken.None),
+            Throws.TypeOf<InvalidOperationException>().With.Message.EqualTo("Invalid prompt key."));
+    }
 }

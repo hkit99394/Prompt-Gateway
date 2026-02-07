@@ -99,6 +99,91 @@ public class OpenAiClientTests
         Assert.That(handler.CallCount, Is.EqualTo(1));
     }
 
+    [Test]
+    public async Task ExecuteAsync_RetriesOnTransientErrors()
+    {
+        var okJson = """
+        {
+          "model": "gpt-test",
+          "choices": [
+            { "message": { "content": "hello" }, "finish_reason": "stop" }
+          ]
+        }
+        """;
+
+        var handler = new QueueMessageHandler(new[]
+        {
+            new HttpResponseMessage(HttpStatusCode.ServiceUnavailable),
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(okJson, Encoding.UTF8, "application/json")
+            }
+        });
+
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://example.com/")
+        };
+
+        var options = TestOptions.Create(new ProviderWorkerOptions
+        {
+            OpenAi = new OpenAiOptions
+            {
+                ApiKey = "test",
+                Model = "gpt-test"
+            }
+        });
+
+        var sut = new OpenAiClient(client, options);
+        var job = new CanonicalJobRequest();
+
+        var result = await sut.ExecuteAsync(job, "hi", CancellationToken.None);
+
+        Assert.That(result.Content, Is.EqualTo("hello"));
+        Assert.That(handler.CallCount, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void ExecuteAsync_ThrowsOpenAiExceptionOnEmptyResponse()
+    {
+        var json = """
+        {
+          "model": "gpt-test",
+          "choices": []
+        }
+        """;
+
+        var handler = new QueueMessageHandler(new[]
+        {
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            }
+        });
+
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://example.com/")
+        };
+
+        var options = TestOptions.Create(new ProviderWorkerOptions
+        {
+            OpenAi = new OpenAiOptions
+            {
+                ApiKey = "test",
+                Model = "gpt-test"
+            }
+        });
+
+        var sut = new OpenAiClient(client, options);
+        var job = new CanonicalJobRequest();
+
+        var ex = Assert.ThrowsAsync<OpenAiException>(
+            async () => await sut.ExecuteAsync(job, "hi", CancellationToken.None));
+
+        Assert.That(ex!.ErrorType, Is.EqualTo("empty_response"));
+    }
+
     private sealed class QueueMessageHandler : HttpMessageHandler
     {
         private readonly Queue<HttpResponseMessage> _responses;

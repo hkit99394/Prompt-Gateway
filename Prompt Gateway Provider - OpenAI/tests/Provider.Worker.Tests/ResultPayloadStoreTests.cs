@@ -88,4 +88,55 @@ public class ResultPayloadStoreTests
             "application/json",
             Arg.Any<CancellationToken>());
     }
+
+    [Test]
+    public async Task StoreIfLargeAsync_UsesPromptBucketWhenResultBucketMissing()
+    {
+        var store = Substitute.For<IObjectStore>();
+        var options = TestOptions.Create(new ProviderWorkerOptions
+        {
+            LargePayloadThresholdBytes = 1,
+            ResultBucket = string.Empty,
+            PromptBucket = "prompts"
+        });
+        var payloadStore = new ResultPayloadStore(store, options);
+
+        var job = new CanonicalJobRequest { JobId = "job-3", AttemptId = "attempt-3" };
+        store.PutObjectTextAsync(
+                "prompts",
+                "results/job-3/attempt-3/payload.json",
+                Arg.Any<string>(),
+                "application/json",
+                Arg.Any<CancellationToken>())
+            .Returns("s3://prompts/results/job-3/attempt-3/payload.json");
+
+        var result = await payloadStore.StoreIfLargeAsync(job, "large", CancellationToken.None);
+
+        Assert.That(result, Is.EqualTo("s3://prompts/results/job-3/attempt-3/payload.json"));
+        await store.Received(1).PutObjectTextAsync(
+            "prompts",
+            "results/job-3/attempt-3/payload.json",
+            Arg.Any<string>(),
+            "application/json",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task StoreAsync_ReturnsNullWhenNoBucketAvailable()
+    {
+        var store = Substitute.For<IObjectStore>();
+        var options = TestOptions.Create(new ProviderWorkerOptions
+        {
+            ResultBucket = string.Empty,
+            PromptBucket = string.Empty
+        });
+        var payloadStore = new ResultPayloadStore(store, options);
+
+        var job = new CanonicalJobRequest { JobId = "job-4", AttemptId = "attempt-4" };
+        var result = await payloadStore.StoreAsync(job, "payload", "error.json", CancellationToken.None);
+
+        Assert.That(result, Is.Null);
+        await store.DidNotReceive()
+            .PutObjectTextAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
 }
