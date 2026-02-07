@@ -160,7 +160,7 @@ public class Worker : BackgroundService
             ["job_id"] = job.JobId,
             ["attempt_id"] = job.AttemptId,
             ["provider"] = _options.ProviderName,
-            ["model"] = job.Model ?? _options.OpenAi.Model
+            ["model"] = string.IsNullOrWhiteSpace(job.Model) ? _options.OpenAi.Model : job.Model
         });
 
         var dedupeDecision = await _dedupeStore.TryStartAsync(job.JobId, job.AttemptId, stoppingToken);
@@ -240,6 +240,12 @@ public class Worker : BackgroundService
         {
             visibilityCts.Cancel();
             await visibilityTask;
+        }
+
+        if (openAiResult is null)
+        {
+            _logger.LogWarning("OpenAI result missing.");
+            return;
         }
 
         var responsePayload = new CanonicalResponse
@@ -336,6 +342,7 @@ public class Worker : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to extend message visibility.");
+                return;
             }
         }
     }

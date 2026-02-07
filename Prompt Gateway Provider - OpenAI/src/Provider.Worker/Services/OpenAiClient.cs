@@ -87,6 +87,11 @@ public class OpenAiClient(HttpClient httpClient, IOptions<ProviderWorkerOptions>
     private OpenAiChatRequest BuildRequest(CanonicalJobRequest job, string promptText)
     {
         var parameters = job.Parameters ?? new OpenAiParameters();
+        var temperature = Normalize(parameters.Temperature ?? _options.OpenAi.Temperature, 0, 2);
+        var maxTokens = NormalizeMaxTokens(parameters.MaxTokens ?? _options.OpenAi.MaxTokens);
+        var topP = NormalizeNullable(parameters.TopP, 0, 1);
+        var presencePenalty = NormalizeNullable(parameters.PresencePenalty, -2, 2);
+        var frequencyPenalty = NormalizeNullable(parameters.FrequencyPenalty, -2, 2);
 
         var messages = new List<OpenAiChatMessage>();
         if (!string.IsNullOrWhiteSpace(job.SystemPrompt))
@@ -104,16 +109,43 @@ public class OpenAiClient(HttpClient httpClient, IOptions<ProviderWorkerOptions>
             Content = promptText
         });
 
+        var model = string.IsNullOrWhiteSpace(job.Model) ? _options.OpenAi.Model : job.Model;
+
         return new OpenAiChatRequest
         {
-            Model = job.Model ?? _options.OpenAi.Model,
+            Model = model,
             Messages = messages,
-            Temperature = parameters.Temperature ?? _options.OpenAi.Temperature,
-            MaxTokens = parameters.MaxTokens ?? _options.OpenAi.MaxTokens,
-            TopP = parameters.TopP,
-            PresencePenalty = parameters.PresencePenalty,
-            FrequencyPenalty = parameters.FrequencyPenalty
+            Temperature = temperature,
+            MaxTokens = maxTokens,
+            TopP = topP,
+            PresencePenalty = presencePenalty,
+            FrequencyPenalty = frequencyPenalty
         };
+    }
+
+    private static double Normalize(double value, double min, double max)
+    {
+        return Math.Clamp(value, min, max);
+    }
+
+    private static double? NormalizeNullable(double? value, double min, double max)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        return Math.Clamp(value.Value, min, max);
+    }
+
+    private static int? NormalizeMaxTokens(int? value)
+    {
+        if (!value.HasValue || value.Value <= 0)
+        {
+            return null;
+        }
+
+        return value.Value;
     }
 
     private static bool ShouldRetry(HttpStatusCode statusCode)

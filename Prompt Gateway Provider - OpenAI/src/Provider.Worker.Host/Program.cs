@@ -6,8 +6,11 @@ using Provider.Worker.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.Configure<ProviderWorkerOptions>(
-    builder.Configuration.GetSection(ProviderWorkerOptions.SectionName));
+builder.Services.AddOptions<ProviderWorkerOptions>()
+    .Bind(builder.Configuration.GetSection(ProviderWorkerOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(options => options.TryValidate(out _), "Invalid ProviderWorker configuration.")
+    .ValidateOnStart();
 
 builder.Services.AddProviderWorkerAws();
 builder.Services.AddSingleton<IPromptTemplateStore, PromptTemplateStore>();

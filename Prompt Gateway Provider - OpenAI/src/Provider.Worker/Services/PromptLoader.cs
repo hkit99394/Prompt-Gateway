@@ -17,7 +17,15 @@ public class PromptTemplateStore(IObjectStore objectStore, IOptions<ProviderWork
 
     public async Task<string> GetTemplateAsync(CanonicalJobRequest job, CancellationToken cancellationToken)
     {
-        var bucket = job.PromptBucket ?? job.PromptS3Bucket ?? _options.PromptBucket;
+        var requestedBucket = job.PromptBucket ?? job.PromptS3Bucket;
+        if (!string.IsNullOrWhiteSpace(requestedBucket) &&
+            (string.IsNullOrWhiteSpace(_options.PromptBucket) ||
+             !string.Equals(requestedBucket, _options.PromptBucket, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("Prompt bucket override is not allowed.");
+        }
+
+        var bucket = requestedBucket ?? _options.PromptBucket;
         if (string.IsNullOrWhiteSpace(bucket))
         {
             throw new InvalidOperationException("Prompt bucket not configured.");
@@ -29,6 +37,27 @@ public class PromptTemplateStore(IObjectStore objectStore, IOptions<ProviderWork
             throw new InvalidOperationException("Prompt key missing.");
         }
 
+        ValidateBucketName(bucket);
+        ValidateObjectKey(key);
+
         return await _objectStore.GetObjectTextAsync(bucket, key, cancellationToken);
+    }
+
+    private static void ValidateBucketName(string bucket)
+    {
+        if (bucket.Contains('/') || bucket.Contains('\\'))
+        {
+            throw new InvalidOperationException("Invalid prompt bucket name.");
+        }
+    }
+
+    private static void ValidateObjectKey(string key)
+    {
+        if (key.Contains("..", StringComparison.Ordinal) ||
+            key.StartsWith("/", StringComparison.Ordinal) ||
+            key.StartsWith("\\", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Invalid prompt key.");
+        }
     }
 }
