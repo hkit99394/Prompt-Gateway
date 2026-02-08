@@ -117,7 +117,7 @@ public class Worker : BackgroundService
         Task[] remaining;
         lock (inFlightLock)
         {
-            remaining = inFlight.ToArray();
+            remaining = [.. inFlight];
         }
         await Task.WhenAll(remaining);
     }
