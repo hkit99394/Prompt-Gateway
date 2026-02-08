@@ -4,6 +4,7 @@ using ControlPlane.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddControllers();
 builder.Services.AddSingleton<IClock, SystemClock>();
 builder.Services.AddSingleton<IIdGenerator, GuidIdGenerator>();
 builder.Services.AddSingleton<ICanonicalResponseAssembler, SimpleResponseAssembler>();
@@ -59,38 +60,6 @@ builder.Services.AddHostedService<OutboxWorker>();
 
 var app = builder.Build();
 
-app.MapPost("/jobs", async (CanonicalJobRequest request, JobOrchestrator orchestrator, CancellationToken ct) =>
-{
-    var handle = await orchestrator.AcceptAsync(request, ct);
-    var routing = await orchestrator.RouteAsync(handle.JobId, ct);
-    var dispatch = await orchestrator.DispatchAsync(handle.JobId, handle.AttemptId, ct);
-
-    return Results.Ok(new
-    {
-        handle.JobId,
-        handle.AttemptId,
-        handle.TraceId,
-        routing,
-        dispatch.IdempotencyKey
-    });
-});
-
-app.MapGet("/jobs/{jobId}", async (string jobId, JobOrchestrator orchestrator, CancellationToken ct) =>
-{
-    var job = await orchestrator.GetJobAsync(jobId, ct);
-    return job is null ? Results.NotFound() : Results.Ok(job);
-});
-
-app.MapGet("/jobs/{jobId}/result", async (string jobId, JobOrchestrator orchestrator, CancellationToken ct) =>
-{
-    var result = await orchestrator.GetFinalResultAsync(jobId, ct);
-    return result is null ? Results.NotFound() : Results.Ok(result);
-});
-
-app.MapGet("/jobs/{jobId}/events", async (string jobId, JobOrchestrator orchestrator, CancellationToken ct) =>
-{
-    var events = await orchestrator.GetEventsAsync(jobId, ct);
-    return Results.Ok(events);
-});
+app.MapControllers();
 
 app.Run();

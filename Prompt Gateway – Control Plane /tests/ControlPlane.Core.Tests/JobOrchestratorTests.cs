@@ -368,4 +368,46 @@ public class JobOrchestratorTests
             Arg.Is<JobEvent>(evt => evt.Type == JobEventType.Retried),
             Arg.Any<CancellationToken>());
     }
+
+    [Test]
+    public async Task ListJobsAsync_ReturnsSummaries()
+    {
+        var jobStore = Substitute.For<IJobStore>();
+        var eventStore = Substitute.For<IJobEventStore>();
+        var routingPolicy = Substitute.For<IRoutingPolicy>();
+        var outboxStore = Substitute.For<IOutboxStore>();
+        var dedupeStore = Substitute.For<IDeduplicationStore>();
+        var assembler = Substitute.For<ICanonicalResponseAssembler>();
+        var resultStore = Substitute.For<IResultStore>();
+        var retryPlanner = Substitute.For<IRetryPlanner>();
+        var idGenerator = Substitute.For<IIdGenerator>();
+        var clock = Substitute.For<IClock>();
+        var logger = Substitute.For<ILogger<JobOrchestrator>>();
+
+        var summaries = new[]
+        {
+            new JobSummary("job-9", "trace-9", "attempt-9", JobState.Completed, DateTimeOffset.UtcNow.AddMinutes(-10), DateTimeOffset.UtcNow)
+        };
+
+        jobStore.ListAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(summaries);
+
+        var orchestrator = new JobOrchestrator(
+            logger,
+            jobStore,
+            eventStore,
+            routingPolicy,
+            outboxStore,
+            dedupeStore,
+            assembler,
+            resultStore,
+            retryPlanner,
+            idGenerator,
+            clock);
+
+        var result = await orchestrator.ListJobsAsync(10, CancellationToken.None);
+
+        Assert.That(result, Is.EqualTo(summaries));
+        await jobStore.Received(1).ListAsync(10, Arg.Any<CancellationToken>());
+    }
 }

@@ -11,6 +11,8 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore
     private const string SortKey = "sk";
     private const string SnapshotField = "job_snapshot";
     private const string UpdatedAtField = "updated_at";
+    private const string JobPartitionPrefix = "JOB#";
+    private const string JobSortKey = "JOB";
 
     public DynamoDbJobStore(IAmazonDynamoDB dynamoDb, DynamoDbOptions options)
         : base(dynamoDb, options)
@@ -26,8 +28,8 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore
             TableName = Options.TableName,
             Item = new Dictionary<string, AttributeValue>
             {
-                [PartitionKey] = Attr($"JOB#{job.JobId}"),
-                [SortKey] = Attr("JOB"),
+                [PartitionKey] = Attr($"{JobPartitionPrefix}{job.JobId}"),
+                [SortKey] = Attr(JobSortKey),
                 [SnapshotField] = Attr(JsonSerializer.Serialize(snapshot, SerializerOptions)),
                 [UpdatedAtField] = Attr(FormatTimestamp(job.UpdatedAt))
             },
@@ -49,8 +51,8 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore
             TableName = Options.TableName,
             Key = new Dictionary<string, AttributeValue>
             {
-                [PartitionKey] = Attr($"JOB#{jobId}"),
-                [SortKey] = Attr("JOB")
+                [PartitionKey] = Attr($"{JobPartitionPrefix}{jobId}"),
+                [SortKey] = Attr(JobSortKey)
             }
         }, cancellationToken);
 
@@ -78,8 +80,8 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore
             TableName = Options.TableName,
             Key = new Dictionary<string, AttributeValue>
             {
-                [PartitionKey] = Attr($"JOB#{job.JobId}"),
-                [SortKey] = Attr("JOB")
+                [PartitionKey] = Attr($"{JobPartitionPrefix}{job.JobId}"),
+                [SortKey] = Attr(JobSortKey)
             },
             UpdateExpression = "SET #snapshot = :snapshot, #updatedAt = :updatedAt",
             ExpressionAttributeNames = new Dictionary<string, string>
@@ -95,6 +97,79 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore
         };
 
         await DynamoDb.UpdateItemAsync(request, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<JobSummary>> ListAsync(int limit, CancellationToken cancellationToken)
+    {
+        EnsureConfigured();
+        if (limit <= 0)
+        {
+            return Array.Empty<JobSummary>();
+        }
+
+        var results = new List<JobSummary>(limit);
+        Dictionary<string, AttributeValue>? startKey = null;
+
+        while (results.Count < limit)
+        {
+            var pageLimit = Math.Min(100, limit - results.Count);
+            var request = new ScanRequest
+            {
+                TableName = Options.TableName,
+                FilterExpression = "begins_with(#pk, :prefix) AND #sk = :sk",
+                ExpressionAttributeNames = new Dictionary<string, string>
+                {
+                    ["#pk"] = PartitionKey,
+                    ["#sk"] = SortKey
+                },
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":prefix"] = Attr(JobPartitionPrefix),
+                    [":sk"] = Attr(JobSortKey)
+                },
+                Limit = pageLimit,
+                ExclusiveStartKey = startKey,
+                ProjectionExpression = "#pk, #sk, #snapshot, #updatedAt"
+            };
+
+            request.ExpressionAttributeNames["#snapshot"] = SnapshotField;
+            request.ExpressionAttributeNames["#updatedAt"] = UpdatedAtField;
+
+            var response = await DynamoDb.ScanAsync(request, cancellationToken);
+            foreach (var item in response.Items)
+            {
+                var snapshotJson = GetString(item, SnapshotField);
+                if (string.IsNullOrWhiteSpace(snapshotJson))
+                {
+                    continue;
+                }
+
+                var snapshot = JsonSerializer.Deserialize<JobRecordSnapshot>(snapshotJson, SerializerOptions);
+                if (snapshot is null)
+                {
+                    continue;
+                }
+
+                results.Add(new JobSummary(
+                    snapshot.JobId,
+                    snapshot.TraceId,
+                    snapshot.CurrentAttemptId,
+                    snapshot.State,
+                    snapshot.CreatedAt,
+                    snapshot.UpdatedAt));
+            }
+
+            startKey = response.LastEvaluatedKey;
+            if (startKey is null || startKey.Count == 0)
+            {
+                break;
+            }
+        }
+
+        return results
+            .OrderByDescending(summary => summary.UpdatedAt)
+            .Take(limit)
+            .ToList();
     }
 
     private static JobRecordSnapshot ToSnapshot(JobRecord job)

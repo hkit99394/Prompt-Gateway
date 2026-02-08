@@ -235,7 +235,7 @@ public sealed class JobOrchestrator
                 Provider = retryPlan.Provider!,
                 Model = retryPlan.Model ?? string.Empty,
                 PolicyVersion = "retry",
-                FallbackProviders = Array.Empty<string>()
+                FallbackProviders = attempt.RoutingDecision?.FallbackProviders ?? Array.Empty<string>()
             }, now);
 
             job.SetState(JobState.Retrying, now);
@@ -281,6 +281,9 @@ public sealed class JobOrchestrator
 
     public Task<JobRecord?> GetJobAsync(string jobId, CancellationToken cancellationToken)
         => _jobStore.GetAsync(jobId, cancellationToken);
+
+    public Task<IReadOnlyList<JobSummary>> ListJobsAsync(int limit, CancellationToken cancellationToken)
+        => _jobStore.ListAsync(limit, cancellationToken);
 
     public Task<CanonicalResponse?> GetFinalResultAsync(string jobId, CancellationToken cancellationToken)
         => _resultStore.GetFinalResultAsync(jobId, cancellationToken);
