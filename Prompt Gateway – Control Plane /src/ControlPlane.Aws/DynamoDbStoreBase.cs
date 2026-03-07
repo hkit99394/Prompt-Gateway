@@ -7,18 +7,19 @@ namespace ControlPlane.Aws;
 
 public abstract class DynamoDbStoreBase
 {
+    private static readonly JsonSerializerOptions SharedSerializerOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     protected readonly IAmazonDynamoDB DynamoDb;
     protected readonly DynamoDbOptions Options;
-    protected readonly JsonSerializerOptions SerializerOptions;
+    protected readonly JsonSerializerOptions SerializerOptions = SharedSerializerOptions;
 
     protected DynamoDbStoreBase(IAmazonDynamoDB dynamoDb, DynamoDbOptions options)
     {
         DynamoDb = dynamoDb;
         Options = options;
-        SerializerOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        };
     }
 
     protected void EnsureConfigured()
@@ -36,6 +37,8 @@ public abstract class DynamoDbStoreBase
         => DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 
     protected static AttributeValue Attr(string value) => new() { S = value };
+    protected static AttributeValue Attr(long value) => new() { N = value.ToString(CultureInfo.InvariantCulture) };
+    protected static long ToUnixTimeSeconds(DateTimeOffset value) => value.ToUnixTimeSeconds();
 
     protected static string? GetString(Dictionary<string, AttributeValue> item, string key)
         => item.TryGetValue(key, out var value) ? value.S : null;

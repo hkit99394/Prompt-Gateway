@@ -8,6 +8,10 @@
 - Configure DynamoDB storage:
   - `AwsStorage__TableName`
   - `AwsStorage__JobListIndexName` (defaults to `gsi1`, expected key schema: `gsi1pk` + `gsi1sk`)
+  - `AwsStorage__DeduplicationTtlDays` (defaults to `7`)
+  - `AwsStorage__OutboxTerminalTtlDays` (defaults to `7`)
+  - `AwsStorage__EventTtlDays` (defaults to `30`)
+  - `AwsStorage__ResultTtlDays` (defaults to `30`)
 - Do not store production keys in `appsettings.json`.
 - Keep keys in an environment variable source or external secret manager.
 

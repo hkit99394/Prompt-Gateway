@@ -10,6 +10,7 @@ public sealed class DynamoDbResultStore : DynamoDbStoreBase, IResultStore
     private const string PartitionKey = "pk";
     private const string SortKey = "sk";
     private const string ResponseField = "response_json";
+    private const string TtlField = "ttl";
 
     public DynamoDbResultStore(IAmazonDynamoDB dynamoDb, DynamoDbOptions options)
         : base(dynamoDb, options)
@@ -72,6 +73,11 @@ public sealed class DynamoDbResultStore : DynamoDbStoreBase, IResultStore
                 [ResponseField] = Attr(JsonSerializer.Serialize(response, SerializerOptions))
             }
         };
+
+        if (Options.ResultTtlDays > 0)
+        {
+            request.Item[TtlField] = Attr(ToUnixTimeSeconds(DateTimeOffset.UtcNow.AddDays(Options.ResultTtlDays)));
+        }
 
         await DynamoDb.PutItemAsync(request, cancellationToken);
     }

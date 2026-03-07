@@ -155,6 +155,7 @@ public class JobOrchestratorTests
             Model = "gpt-4.1",
             PolicyVersion = "v1"
         }, now);
+        job.SetState(JobState.Routed, now);
 
         jobStore.GetAsync("job-3", Arg.Any<CancellationToken>()).Returns(job);
 
@@ -238,6 +239,7 @@ public class JobOrchestratorTests
             Model = "gpt-4.1",
             PolicyVersion = "v1"
         }, now);
+        job.SetState(JobState.Routed, now);
         transactionalJobStore.GetAsync("job-transactional", Arg.Any<CancellationToken>()).Returns(job);
 
         var orchestrator = new JobOrchestrator(
@@ -338,6 +340,16 @@ public class JobOrchestratorTests
         };
 
         var job = JobRecord.Create(request, now);
+        var attempt = job.GetAttempt("attempt-5")!;
+        attempt.ApplyRouting(new RoutingDecision
+        {
+            Provider = "openai",
+            Model = "gpt-4.1",
+            PolicyVersion = "v1"
+        }, now);
+        attempt.SetState(AttemptState.Dispatched, now);
+        job.SetState(JobState.Routed, now);
+        job.SetState(JobState.Dispatched, now);
         jobStore.GetAsync("job-5", Arg.Any<CancellationToken>()).Returns(job);
         dedupeStore.TryStartAsync("job-5", "attempt-5", Arg.Any<CancellationToken>())
             .Returns(true);
@@ -411,6 +423,16 @@ public class JobOrchestratorTests
         };
 
         var job = JobRecord.Create(request, now);
+        var attempt = job.GetAttempt("attempt-6")!;
+        attempt.ApplyRouting(new RoutingDecision
+        {
+            Provider = "openai",
+            Model = "gpt-4.1",
+            PolicyVersion = "v1"
+        }, now);
+        attempt.SetState(AttemptState.Dispatched, now);
+        job.SetState(JobState.Routed, now);
+        job.SetState(JobState.Dispatched, now);
         jobStore.GetAsync("job-6", Arg.Any<CancellationToken>()).Returns(job);
 
         retryPlanner.PlanRetry(job, Arg.Any<JobAttempt>(), Arg.Any<ProviderResultEvent>())
@@ -497,6 +519,16 @@ public class JobOrchestratorTests
         };
 
         var job = JobRecord.Create(request, now);
+        var attempt = job.GetAttempt("attempt-transactional-retry")!;
+        attempt.ApplyRouting(new RoutingDecision
+        {
+            Provider = "openai",
+            Model = "gpt-4.1",
+            PolicyVersion = "v1"
+        }, now);
+        attempt.SetState(AttemptState.Dispatched, now);
+        job.SetState(JobState.Routed, now);
+        job.SetState(JobState.Dispatched, now);
         transactionalJobStore.GetAsync("job-transactional-retry", Arg.Any<CancellationToken>()).Returns(job);
         retryPlanner.PlanRetry(job, Arg.Any<JobAttempt>(), Arg.Any<ProviderResultEvent>())
             .Returns(RetryPlan.ForProvider("anthropic", "claude-3", "fallback"));
@@ -563,6 +595,16 @@ public class JobOrchestratorTests
             TaskType = "chat_completion"
         };
         var job = JobRecord.Create(request, now);
+        var attempt = job.GetAttempt("attempt-transactional-success")!;
+        attempt.ApplyRouting(new RoutingDecision
+        {
+            Provider = "openai",
+            Model = "gpt-4.1",
+            PolicyVersion = "v1"
+        }, now);
+        attempt.SetState(AttemptState.Dispatched, now);
+        job.SetState(JobState.Routed, now);
+        job.SetState(JobState.Dispatched, now);
         transactionalJobStore.GetAsync("job-transactional-success", Arg.Any<CancellationToken>()).Returns(job);
         var response = new CanonicalResponse { Provider = "openai", Model = "gpt-4.1" };
         assembler.AssembleAsync(Arg.Any<ProviderResultEvent>(), Arg.Any<CancellationToken>()).Returns(response);
@@ -726,7 +768,9 @@ public class JobOrchestratorTests
             TaskType = "chat_completion"
         };
         var job = JobRecord.Create(request, now);
-        job.SetState(JobState.Completed, now.AddMinutes(1));
+        job.SetState(JobState.Routed, now.AddMinutes(1));
+        job.SetState(JobState.Dispatched, now.AddMinutes(2));
+        job.SetState(JobState.Completed, now.AddMinutes(3));
         jobStore.GetAsync("job-resume-terminal", Arg.Any<CancellationToken>()).Returns(job);
 
         var orchestrator = new JobOrchestrator(

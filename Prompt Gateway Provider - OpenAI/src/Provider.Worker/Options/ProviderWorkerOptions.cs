@@ -33,6 +33,8 @@ public class ProviderWorkerOptions
     public int DedupeMemoryTtlMinutes { get; set; } = 60;
 
     public string DedupeTableName { get; set; } = string.Empty;
+    public int OpenAiRetryMaxAttempts { get; set; } = 3;
+    public int OpenAiRetryMaxBackoffSeconds { get; set; } = 10;
 
     public OpenAiOptions OpenAi { get; set; } = new();
 
@@ -101,6 +103,18 @@ public class ProviderWorkerOptions
         if (OpenAi.MaxTokens.HasValue && OpenAi.MaxTokens.Value <= 0)
         {
             error = "OpenAi.MaxTokens must be greater than 0 when specified.";
+            return false;
+        }
+
+        if (OpenAiRetryMaxAttempts <= 0)
+        {
+            error = "OpenAiRetryMaxAttempts must be greater than 0.";
+            return false;
+        }
+
+        if (OpenAiRetryMaxBackoffSeconds <= 0)
+        {
+            error = "OpenAiRetryMaxBackoffSeconds must be greater than 0.";
             return false;
         }
 

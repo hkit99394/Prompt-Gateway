@@ -28,8 +28,38 @@ public sealed class JobAttempt
 
     public void SetState(AttemptState state, DateTimeOffset updatedAt)
     {
+        if (!IsValidTransition(State, state))
+        {
+            throw new InvalidOperationException($"Invalid attempt state transition '{State}' -> '{state}'.");
+        }
+
         State = state;
         UpdatedAt = updatedAt;
+    }
+
+    internal void RestoreState(AttemptState state, DateTimeOffset updatedAt)
+    {
+        State = state;
+        UpdatedAt = updatedAt;
+    }
+
+    private static bool IsValidTransition(AttemptState current, AttemptState next)
+    {
+        if (current == next)
+        {
+            return true;
+        }
+
+        return current switch
+        {
+            AttemptState.Created => next is AttemptState.Routed or AttemptState.Failed,
+            AttemptState.Routed => next is AttemptState.Dispatched or AttemptState.Failed,
+            AttemptState.Dispatched => next is AttemptState.Started or AttemptState.Completed or AttemptState.Failed,
+            AttemptState.Started => next is AttemptState.Completed or AttemptState.Failed,
+            AttemptState.Completed => false,
+            AttemptState.Failed => false,
+            _ => false
+        };
     }
 }
 
@@ -123,12 +153,12 @@ public sealed class JobRecord
                 attempt.ApplyRouting(attemptSnapshot.RoutingDecision, attemptSnapshot.UpdatedAt);
             }
 
-            attempt.SetState(attemptSnapshot.State, attemptSnapshot.UpdatedAt);
+            attempt.RestoreState(attemptSnapshot.State, attemptSnapshot.UpdatedAt);
             record._attempts.Add(attempt);
         }
 
         record.CurrentAttemptId = snapshot.CurrentAttemptId;
-        record.SetState(snapshot.State, snapshot.UpdatedAt);
+        record.RestoreState(snapshot.State, snapshot.UpdatedAt);
         return record;
     }
 
@@ -148,7 +178,40 @@ public sealed class JobRecord
 
     public void SetState(JobState state, DateTimeOffset updatedAt)
     {
+        if (!IsValidTransition(State, state))
+        {
+            throw new InvalidOperationException($"Invalid job state transition '{State}' -> '{state}'.");
+        }
+
         State = state;
         UpdatedAt = updatedAt;
+    }
+
+    internal void RestoreState(JobState state, DateTimeOffset updatedAt)
+    {
+        State = state;
+        UpdatedAt = updatedAt;
+    }
+
+    private static bool IsValidTransition(JobState current, JobState next)
+    {
+        if (current == next)
+        {
+            return true;
+        }
+
+        return current switch
+        {
+            JobState.Created => next is JobState.Routed or JobState.Cancelled or JobState.Expired,
+            JobState.Routed => next is JobState.Dispatched or JobState.Failed or JobState.Cancelled or JobState.Expired,
+            JobState.Dispatched => next is JobState.Started or JobState.Completed or JobState.Failed or JobState.Retrying or JobState.Cancelled or JobState.Expired,
+            JobState.Started => next is JobState.Completed or JobState.Failed or JobState.Retrying or JobState.Cancelled or JobState.Expired,
+            JobState.Retrying => next is JobState.Dispatched or JobState.Failed or JobState.Cancelled or JobState.Expired,
+            JobState.Completed => false,
+            JobState.Failed => false,
+            JobState.Cancelled => false,
+            JobState.Expired => false,
+            _ => false
+        };
     }
 }

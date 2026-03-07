@@ -11,6 +11,7 @@ public sealed class DynamoDbJobEventStore : DynamoDbStoreBase, IJobEventStore
     private const string SortKey = "sk";
     private const string EventField = "event_json";
     private const string EventPrefix = "EVENT#";
+    private const string TtlField = "ttl";
 
     public DynamoDbJobEventStore(IAmazonDynamoDB dynamoDb, DynamoDbOptions options)
         : base(dynamoDb, options)
@@ -31,6 +32,11 @@ public sealed class DynamoDbJobEventStore : DynamoDbStoreBase, IJobEventStore
                 [EventField] = Attr(JsonSerializer.Serialize(jobEvent, SerializerOptions))
             }
         };
+
+        if (Options.EventTtlDays > 0)
+        {
+            request.Item[TtlField] = Attr(ToUnixTimeSeconds(jobEvent.OccurredAt.AddDays(Options.EventTtlDays)));
+        }
 
         await DynamoDb.PutItemAsync(request, cancellationToken);
     }

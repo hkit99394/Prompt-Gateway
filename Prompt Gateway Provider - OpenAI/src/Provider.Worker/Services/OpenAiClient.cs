@@ -38,7 +38,7 @@ public class OpenAiClient(IOptions<ProviderWorkerOptions> options) : IOpenAiClie
         CancellationToken cancellationToken)
     {
         var attempt = 0;
-        var maxAttempts = 3;
+        var maxAttempts = _options.OpenAiRetryMaxAttempts;
 
         while (true)
         {
@@ -53,7 +53,7 @@ public class OpenAiClient(IOptions<ProviderWorkerOptions> options) : IOpenAiClie
             }
             catch (Exception) when (attempt < maxAttempts)
             {
-                await Task.Delay(BackoffDelay(attempt), cancellationToken);
+                await Task.Delay(BackoffDelay(attempt, _options.OpenAiRetryMaxBackoffSeconds), cancellationToken);
             }
         }
     }
@@ -102,11 +102,11 @@ public class OpenAiClient(IOptions<ProviderWorkerOptions> options) : IOpenAiClie
         };
     }
 
-    private static TimeSpan BackoffDelay(int attempt)
+    private static TimeSpan BackoffDelay(int attempt, int maxBackoffSeconds)
     {
         var jitter = Random.Shared.NextDouble() * 0.3 + 0.85;
         var seconds = Math.Pow(2, attempt) * jitter;
-        return TimeSpan.FromSeconds(Math.Min(10, seconds));
+        return TimeSpan.FromSeconds(Math.Min(maxBackoffSeconds, seconds));
     }
 
     private static UsageMetrics? MapUsage(ResponseTokenUsage? usage)

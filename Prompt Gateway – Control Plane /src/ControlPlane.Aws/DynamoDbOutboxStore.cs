@@ -15,6 +15,7 @@ public sealed class DynamoDbOutboxStore : DynamoDbStoreBase, IOutboxStore
     private const string ProcessingStartedAtField = "processing_started_at";
     private const string ProcessingOwnerField = "processing_owner";
     private const string ErrorField = "error";
+    private const string TtlField = "ttl";
     private const string OutboxPartition = "OUTBOX";
     private static readonly TimeSpan ProcessingLease = TimeSpan.FromMinutes(1);
     private readonly IClock _clock;
@@ -147,6 +148,7 @@ public sealed class DynamoDbOutboxStore : DynamoDbStoreBase, IOutboxStore
     public async Task MarkDispatchedAsync(string outboxId, CancellationToken cancellationToken)
     {
         EnsureConfigured();
+        var ttl = ToUnixTimeSeconds(_clock.UtcNow.AddDays(Options.OutboxTerminalTtlDays));
         var request = new UpdateItemRequest
         {
             TableName = Options.TableName,
@@ -155,16 +157,18 @@ public sealed class DynamoDbOutboxStore : DynamoDbStoreBase, IOutboxStore
                 [PartitionKey] = Attr(OutboxPartition),
                 [SortKey] = Attr(outboxId)
             },
-            UpdateExpression = "SET #status = :dispatched REMOVE #startedAt, #owner",
+            UpdateExpression = "SET #status = :dispatched, #ttl = :ttl REMOVE #startedAt, #owner",
             ExpressionAttributeNames = new Dictionary<string, string>
             {
                 ["#status"] = StatusField,
                 ["#startedAt"] = ProcessingStartedAtField,
-                ["#owner"] = ProcessingOwnerField
+                ["#owner"] = ProcessingOwnerField,
+                ["#ttl"] = TtlField
             },
             ExpressionAttributeValues = new Dictionary<string, AttributeValue>
             {
-                [":dispatched"] = Attr("dispatched")
+                [":dispatched"] = Attr("dispatched"),
+                [":ttl"] = Attr(ttl)
             }
         };
 
@@ -182,13 +186,14 @@ public sealed class DynamoDbOutboxStore : DynamoDbStoreBase, IOutboxStore
                 [PartitionKey] = Attr(OutboxPartition),
                 [SortKey] = Attr(outboxId)
             },
-            UpdateExpression = "SET #status = :pending REMOVE #startedAt, #owner, #error",
+            UpdateExpression = "SET #status = :pending REMOVE #startedAt, #owner, #error, #ttl",
             ExpressionAttributeNames = new Dictionary<string, string>
             {
                 ["#status"] = StatusField,
                 ["#startedAt"] = ProcessingStartedAtField,
                 ["#owner"] = ProcessingOwnerField,
-                ["#error"] = ErrorField
+                ["#error"] = ErrorField,
+                ["#ttl"] = TtlField
             },
             ExpressionAttributeValues = new Dictionary<string, AttributeValue>
             {
@@ -202,6 +207,7 @@ public sealed class DynamoDbOutboxStore : DynamoDbStoreBase, IOutboxStore
     public async Task MarkFailedAsync(string outboxId, string reason, CancellationToken cancellationToken)
     {
         EnsureConfigured();
+        var ttl = ToUnixTimeSeconds(_clock.UtcNow.AddDays(Options.OutboxTerminalTtlDays));
         var request = new UpdateItemRequest
         {
             TableName = Options.TableName,
@@ -210,18 +216,20 @@ public sealed class DynamoDbOutboxStore : DynamoDbStoreBase, IOutboxStore
                 [PartitionKey] = Attr(OutboxPartition),
                 [SortKey] = Attr(outboxId)
             },
-            UpdateExpression = "SET #status = :failed, #error = :error REMOVE #startedAt, #owner",
+            UpdateExpression = "SET #status = :failed, #error = :error, #ttl = :ttl REMOVE #startedAt, #owner",
             ExpressionAttributeNames = new Dictionary<string, string>
             {
                 ["#status"] = StatusField,
                 ["#error"] = ErrorField,
                 ["#startedAt"] = ProcessingStartedAtField,
-                ["#owner"] = ProcessingOwnerField
+                ["#owner"] = ProcessingOwnerField,
+                ["#ttl"] = TtlField
             },
             ExpressionAttributeValues = new Dictionary<string, AttributeValue>
             {
                 [":failed"] = Attr("failed"),
-                [":error"] = Attr(reason)
+                [":error"] = Attr(reason),
+                [":ttl"] = Attr(ttl)
             }
         };
 

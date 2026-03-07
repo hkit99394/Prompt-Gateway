@@ -128,7 +128,9 @@ public class ApiSecurityTests
             TraceId = "trace-resume-2",
             TaskType = "chat_completion"
         }, createdAt);
-        job.SetState(JobState.Completed, createdAt.AddMinutes(1));
+        job.SetState(JobState.Routed, createdAt.AddMinutes(1));
+        job.SetState(JobState.Dispatched, createdAt.AddMinutes(2));
+        job.SetState(JobState.Completed, createdAt.AddMinutes(3));
         factory.JobStore.GetAsync("job-resume-2", Arg.Any<CancellationToken>()).Returns(job);
 
         var response = await client.PostAsync("/jobs/job-resume-2/resume", content: null);

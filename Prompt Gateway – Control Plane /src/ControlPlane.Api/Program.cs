@@ -53,7 +53,19 @@ var awsQueueOptions = new AwsQueueOptions
 var dynamoOptions = new DynamoDbOptions
 {
     TableName = builder.Configuration["AwsStorage:TableName"] ?? string.Empty,
-    JobListIndexName = builder.Configuration["AwsStorage:JobListIndexName"] ?? "gsi1"
+    JobListIndexName = builder.Configuration["AwsStorage:JobListIndexName"] ?? "gsi1",
+    DeduplicationTtlDays = int.TryParse(builder.Configuration["AwsStorage:DeduplicationTtlDays"], out var dedupeTtlDays)
+        ? dedupeTtlDays
+        : 7,
+    OutboxTerminalTtlDays = int.TryParse(builder.Configuration["AwsStorage:OutboxTerminalTtlDays"], out var outboxTtlDays)
+        ? outboxTtlDays
+        : 7,
+    EventTtlDays = int.TryParse(builder.Configuration["AwsStorage:EventTtlDays"], out var eventTtlDays)
+        ? eventTtlDays
+        : 30,
+    ResultTtlDays = int.TryParse(builder.Configuration["AwsStorage:ResultTtlDays"], out var resultTtlDays)
+        ? resultTtlDays
+        : 30
 };
 
 builder.Services.AddControlPlaneAws(awsQueueOptions, dynamoOptions);

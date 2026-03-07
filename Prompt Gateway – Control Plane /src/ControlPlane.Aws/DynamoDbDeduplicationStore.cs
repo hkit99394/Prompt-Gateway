@@ -9,6 +9,7 @@ public sealed class DynamoDbDeduplicationStore : DynamoDbStoreBase, IDeduplicati
     private const string PartitionKey = "pk";
     private const string SortKey = "sk";
     private const string StatusField = "status";
+    private const string TtlField = "ttl";
 
     public DynamoDbDeduplicationStore(IAmazonDynamoDB dynamoDb, DynamoDbOptions options)
         : base(dynamoDb, options)
@@ -25,7 +26,8 @@ public sealed class DynamoDbDeduplicationStore : DynamoDbStoreBase, IDeduplicati
             {
                 [PartitionKey] = Attr($"DEDUP#{jobId}"),
                 [SortKey] = Attr($"ATTEMPT#{attemptId}"),
-                [StatusField] = Attr("processing")
+                [StatusField] = Attr("processing"),
+                [TtlField] = Attr(ToUnixTimeSeconds(DateTimeOffset.UtcNow.AddDays(Options.DeduplicationTtlDays)))
             },
             ConditionExpression = "attribute_not_exists(#pk) AND attribute_not_exists(#sk)",
             ExpressionAttributeNames = new Dictionary<string, string>

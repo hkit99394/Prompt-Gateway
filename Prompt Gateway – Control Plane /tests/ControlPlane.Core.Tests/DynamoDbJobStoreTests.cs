@@ -150,6 +150,7 @@ public class DynamoDbJobStoreTests
             TaskType = "chat_completion"
         };
         var job = JobRecord.Create(request, previous);
+        job.SetState(JobState.Routed, previous.AddSeconds(1));
         job.SetState(JobState.Dispatched, now);
         var dispatch = new DispatchMessage
         {
@@ -282,6 +283,7 @@ public class DynamoDbJobStoreTests
             TaskType = "chat_completion"
         };
         var job = JobRecord.Create(request, previous);
+        job.SetState(JobState.Routed, previous.AddSeconds(1));
         job.SetState(JobState.Dispatched, now);
         var outbox = new OutboxDispatchMessage(
             "outbox-transaction-conflict",
@@ -309,6 +311,46 @@ public class DynamoDbJobStoreTests
 
         Assert.ThrowsAsync<OptimisticConcurrencyException>(() =>
             store.UpdateAndEnqueueDispatchAsync(job, previous, outbox, jobEvent, dedupeAttemptId: null, CancellationToken.None));
+    }
+
+    [Test]
+    public async Task FinalizeResultIngestionAsync_WritesSingleTransaction()
+    {
+        var dynamoDb = Substitute.For<IAmazonDynamoDB>();
+        var store = new DynamoDbJobStore(dynamoDb, new DynamoDbOptions { TableName = "test-table" });
+        var previous = new DateTimeOffset(2026, 3, 8, 0, 0, 0, TimeSpan.Zero);
+        var now = previous.AddMinutes(1);
+        TransactWriteItemsRequest? capturedRequest = null;
+        dynamoDb
+            .When(x => x.TransactWriteItemsAsync(Arg.Any<TransactWriteItemsRequest>(), Arg.Any<CancellationToken>()))
+            .Do(callInfo => capturedRequest = callInfo.ArgAt<TransactWriteItemsRequest>(0));
+
+        var request = new CanonicalJobRequest
+        {
+            JobId = "job-finalize",
+            AttemptId = "attempt-finalize",
+            TraceId = "trace-finalize",
+            TaskType = "chat_completion"
+        };
+        var job = JobRecord.Create(request, previous);
+        job.SetState(JobState.Routed, now);
+        var response = new CanonicalResponse { Provider = "openai", Model = "gpt-4.1" };
+        var jobEvent = JobEvent.Completed("job-finalize", "attempt-finalize", now, response);
+
+        await store.FinalizeResultIngestionAsync(
+            job,
+            previous,
+            "attempt-finalize",
+            response,
+            jobEvent,
+            CancellationToken.None);
+
+        Assert.That(capturedRequest, Is.Not.Null);
+        Assert.That(capturedRequest!.TransactItems, Has.Count.EqualTo(5));
+        Assert.That(capturedRequest.TransactItems[1].Put!.Item["sk"].S, Is.EqualTo("RESULT#ATTEMPT#attempt-finalize"));
+        Assert.That(capturedRequest.TransactItems[2].Put!.Item["sk"].S, Is.EqualTo("RESULT#FINAL"));
+        Assert.That(capturedRequest.TransactItems[3].Update!.Key["pk"].S, Is.EqualTo("DEDUP#job-finalize"));
+        Assert.That(capturedRequest.TransactItems[4].Put!.Item["pk"].S, Is.EqualTo("JOB#job-finalize"));
     }
 
     private static string SerializeSnapshot(JobRecordSnapshot snapshot)

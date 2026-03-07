@@ -21,6 +21,7 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore, ITransactio
     private const string EventField = "event_json";
     private const string EventPrefix = "EVENT#";
     private const string ResponseField = "response_json";
+    private const string TtlField = "ttl";
     private const string DedupePartitionPrefix = "DEDUP#";
     private const string DedupeSortPrefix = "ATTEMPT#";
     private const string DedupeStatusField = "status";
@@ -318,6 +319,11 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore, ITransactio
             });
         }
 
+        if (Options.EventTtlDays > 0)
+        {
+            transactItems[2].Put!.Item[TtlField] = Attr(ToUnixTimeSeconds(jobEvent.OccurredAt.AddDays(Options.EventTtlDays)));
+        }
+
         var request = new TransactWriteItemsRequest { TransactItems = transactItems };
 
         try
@@ -419,6 +425,13 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore, ITransactio
             }
         };
 
+        if (Options.ResultTtlDays > 0)
+        {
+            var resultTtl = Attr(ToUnixTimeSeconds(job.UpdatedAt.AddDays(Options.ResultTtlDays)));
+            transactItems[1].Put!.Item[TtlField] = resultTtl;
+            transactItems[2].Put!.Item[TtlField] = resultTtl;
+        }
+
         if (jobEvent is not null)
         {
             var eventSortKey = $"{EventPrefix}{FormatTimestamp(jobEvent.OccurredAt)}#{jobEvent.AttemptId}#{jobEvent.Type}";
@@ -435,6 +448,11 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore, ITransactio
                     }
                 }
             });
+
+            if (Options.EventTtlDays > 0)
+            {
+                transactItems[^1].Put!.Item[TtlField] = Attr(ToUnixTimeSeconds(jobEvent.OccurredAt.AddDays(Options.EventTtlDays)));
+            }
         }
 
         var request = new TransactWriteItemsRequest { TransactItems = transactItems };
