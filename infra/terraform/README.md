@@ -2,7 +2,7 @@
 
 IaC for the Control Plane and Provider Worker (ECS Fargate, DynamoDB, SQS, S3, etc.).
 
-> **Note:** Module `main.tf` files are skeletons. Implement resources per `docs/DEPLOYMENT_PLAN.md` (T-2.2 through T-2.9) before running `terraform apply`.
+> **Note:** Module `main.tf` files are skeletons. Implement resources per `docs/DEPLOYMENT_PLAN.md` (T-2.2 through T-2.8) before running `terraform apply`.
 
 ## Structure
 

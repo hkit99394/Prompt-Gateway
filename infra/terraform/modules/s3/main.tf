@@ -1,2 +1,2 @@
 # S3 module - prompts and results buckets
-# Implementation: T-2.8.x
+# Implementation: T-2.7.x

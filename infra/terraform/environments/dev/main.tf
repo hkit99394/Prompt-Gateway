@@ -1,6 +1,6 @@
 # Dev environment - root module
 # Calls all infrastructure modules with dev-specific configuration
-# Implementation: T-2.7.1
+# Implementation: T-2.8.1
 
 terraform {
   required_version = ">= 1.0"
@@ -36,4 +36,13 @@ module "sqs" {
   source = "../../modules/sqs"
 
   environment = var.environment
+}
+
+module "iam" {
+  source = "../../modules/iam"
+
+  environment         = var.environment
+  dynamodb_table_arn  = module.dynamodb.table_arn
+  dispatch_queue_arn  = module.sqs.dispatch_queue_arn
+  result_queue_arn   = module.sqs.result_queue_arn
 }

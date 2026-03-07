@@ -1,5 +1,5 @@
 # S3 module variables
-# Implementation: T-2.8.x
+# Implementation: T-2.7.x
 
 variable "environment" {
   description = "Environment name (dev, staging, prod)"

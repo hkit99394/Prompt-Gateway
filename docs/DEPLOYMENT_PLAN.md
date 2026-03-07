@@ -2,7 +2,7 @@
 
 This document describes the target architecture, infrastructure-as-code layout, CI/CD workflows, and first-deploy procedures for the Prompt Gateway Control Plane and Provider Worker. Each section is broken into detailed steps and tasks.
 
-> **Implementation status:** T-2.1 creates the Terraform directory structure and skeleton files only. Module `main.tf` files contain placeholder comments with no resource definitions; outputs return `null`. **`terraform apply` will fail until T-2.2 through T-2.9 are implemented.** Complete the module implementation tasks before deploying.
+> **Implementation status:** T-2.1 creates the Terraform directory structure and skeleton files only. Module `main.tf` files contain placeholder comments with no resource definitions; outputs return `null`. **`terraform apply` will fail until T-2.2 through T-2.8 are implemented.** Complete the module implementation tasks before deploying.
 
 ---
 
@@ -102,22 +102,22 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | T-2.6.9 | Create ECS service for worker (desired count, no ALB) |
 | T-2.6.10 | Output: `cluster_name`, `api_service_name`, `worker_service_name`, `alb_dns_name`, `ecr_api_repo_url`, `ecr_worker_repo_url` |
 
-### 2.8 S3 module
+### 2.7 S3 module
 
 | Task | Description |
 |------|--------------|
-| T-2.8.1 | Create prompts bucket (versioning, encryption) |
-| T-2.8.2 | Create results bucket (versioning, encryption) |
-| T-2.8.3 | Output: `prompts_bucket_name`, `prompts_bucket_arn`, `results_bucket_name`, `results_bucket_arn` |
+| T-2.7.1 | Create prompts bucket (versioning, encryption) |
+| T-2.7.2 | Create results bucket (versioning, encryption) |
+| T-2.7.3 | Output: `prompts_bucket_name`, `prompts_bucket_arn`, `results_bucket_name`, `results_bucket_arn` |
 
-### 2.9 Environment configs
+### 2.8 Environment configs
 
 | Task | Description |
 |------|--------------|
-| T-2.9.1 | `dev/main.tf`: Call all modules with dev-specific vars (small instance sizes, single NAT) |
-| T-2.9.2 | `staging/main.tf`: Call modules with staging vars |
-| T-2.9.3 | `prod/main.tf`: Call modules with prod vars (multi-AZ, larger instances) |
-| T-2.9.4 | Create `dev.tfvars`, `staging.tfvars`, `prod.tfvars` for environment-specific values |
+| T-2.8.1 | `dev/main.tf`: Call all modules with dev-specific vars (small instance sizes, single NAT) |
+| T-2.8.2 | `staging/main.tf`: Call modules with staging vars |
+| T-2.8.3 | `prod/main.tf`: Call modules with prod vars (multi-AZ, larger instances) |
+| T-2.8.4 | Create `dev.tfvars`, `staging.tfvars`, `prod.tfvars` for environment-specific values |
 
 ---
 
@@ -292,10 +292,10 @@ This document describes the target architecture, infrastructure-as-code layout, 
 - [x] T-2.2.1 – T-2.2.10: Network module
 - [x] T-2.3.1 – T-2.3.6: DynamoDB module
 - [x] T-2.4.1 – T-2.4.6: SQS module
-- [ ] T-2.8.1 – T-2.8.3: S3 module
-- [ ] T-2.5.1 – T-2.5.10: IAM module
+- [ ] T-2.7.1 – T-2.7.3: S3 module
+- [x] T-2.5.1 – T-2.5.10: IAM module
 - [ ] T-2.6.1 – T-2.6.10: ECS service module
-- [ ] T-2.9.1 – T-2.9.4: Environment configs
+- [ ] T-2.8.1 – T-2.8.4: Environment configs
 
 ### CI
 - [ ] T-3.1.1 – T-3.1.2: Workflow file

@@ -1,5 +1,5 @@
 # S3 module outputs
-# Implementation: T-2.8.x
+# Implementation: T-2.7.x
 
 output "prompts_bucket_name" {
   description = "S3 bucket name for prompts"
