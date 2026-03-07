@@ -65,9 +65,9 @@ builder.Services.AddSingleton<JobOrchestrator>();
 builder.Services.AddSingleton<DispatchOutboxProcessor>();
 builder.Services.AddHostedService<OutboxWorker>();
 
-if (string.IsNullOrWhiteSpace(builder.Configuration["ApiSecurity:ApiKey"]))
+if (ApiKeyConfiguration.GetConfiguredApiKeys(builder.Configuration).Count == 0)
 {
-    throw new InvalidOperationException("ApiSecurity:ApiKey must be configured.");
+    throw new InvalidOperationException("At least one API key must be configured in ApiSecurity:ApiKeys or ApiSecurity:ApiKey.");
 }
 
 var app = builder.Build();

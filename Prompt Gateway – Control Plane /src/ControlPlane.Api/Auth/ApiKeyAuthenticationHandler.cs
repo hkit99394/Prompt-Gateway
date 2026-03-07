@@ -24,10 +24,10 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var configuredApiKey = _configuration["ApiSecurity:ApiKey"];
-        if (string.IsNullOrWhiteSpace(configuredApiKey))
+        var configuredApiKeys = ApiKeyConfiguration.GetConfiguredApiKeys(_configuration);
+        if (configuredApiKeys.Count == 0)
         {
-            return Task.FromResult(AuthenticateResult.Fail("API key is not configured."));
+            return Task.FromResult(AuthenticateResult.Fail("API keys are not configured."));
         }
 
         if (!Request.Headers.TryGetValue(HeaderName, out var headerValue) || string.IsNullOrWhiteSpace(headerValue))
@@ -35,7 +35,9 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
             return Task.FromResult(AuthenticateResult.Fail("Missing API key."));
         }
 
-        if (!string.Equals(headerValue.ToString(), configuredApiKey, StringComparison.Ordinal))
+        var providedApiKey = headerValue.ToString();
+        var isValid = configuredApiKeys.Contains(providedApiKey, StringComparer.Ordinal);
+        if (!isValid)
         {
             return Task.FromResult(AuthenticateResult.Fail("Invalid API key."));
         }

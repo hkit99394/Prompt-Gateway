@@ -50,6 +50,18 @@ public class ApiSecurityTests
     }
 
     [Test]
+    public async Task GetJobs_WithRotatedApiKey_ReturnsOk()
+    {
+        await using var factory = new ControlPlaneApiFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(ApiKeyAuthenticationHandler.HeaderName, ControlPlaneApiFactory.RotatedApiKey);
+
+        var response = await client.GetAsync("/jobs?limit=1");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+    }
+
+    [Test]
     public async Task CreateJob_MissingTaskType_ReturnsBadRequest()
     {
         await using var factory = new ControlPlaneApiFactory();
@@ -65,10 +77,13 @@ public class ApiSecurityTests
     private sealed class ControlPlaneApiFactory : WebApplicationFactory<Program>
     {
         public const string ValidApiKey = "test-api-key";
+        public const string RotatedApiKey = "next-test-api-key";
 
         public ControlPlaneApiFactory()
         {
             Environment.SetEnvironmentVariable("ApiSecurity__ApiKey", ValidApiKey);
+            Environment.SetEnvironmentVariable("ApiSecurity__ApiKeys__0", ValidApiKey);
+            Environment.SetEnvironmentVariable("ApiSecurity__ApiKeys__1", RotatedApiKey);
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)

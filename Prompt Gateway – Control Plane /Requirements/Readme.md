@@ -94,8 +94,9 @@ CP-10 Observability
 ⸻
 
 Operational notes (API security + contract)
-	•	Required secret: ApiSecurity:ApiKey
-	•	Recommended source: environment variable ApiSecurity__ApiKey (or external secret store), not appsettings.json.
+	•	Required secret: at least one key in ApiSecurity:ApiKeys or ApiSecurity:ApiKey.
+	•	Recommended source: environment variables (ApiSecurity__ApiKeys__0, ApiSecurity__ApiKeys__1, ...), not appsettings.json.
+	•	Key rotation: support overlapping active keys during rollout, then remove old key after clients switch.
 	•	Required request header for protected endpoints: X-API-Key
 	•	Expected API responses:
 	•	401 Unauthorized: missing or invalid X-API-Key
