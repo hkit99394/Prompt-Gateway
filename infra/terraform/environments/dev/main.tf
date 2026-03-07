@@ -31,3 +31,9 @@ module "dynamodb" {
   table_name  = "prompt-gateway-${var.environment}"
   gsi_name    = "JobListIndex"
 }
+
+module "sqs" {
+  source = "../../modules/sqs"
+
+  environment = var.environment
+}
