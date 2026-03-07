@@ -152,7 +152,6 @@ public sealed class JobOrchestrator
 
         var outbox = new OutboxDispatchMessage(_idGenerator.NewId("outbox"), dispatch, now);
         await _outboxStore.EnqueueDispatchAsync(outbox, cancellationToken);
-
         attempt.SetState(AttemptState.Dispatched, now);
         job.SetState(JobState.Dispatched, now);
 

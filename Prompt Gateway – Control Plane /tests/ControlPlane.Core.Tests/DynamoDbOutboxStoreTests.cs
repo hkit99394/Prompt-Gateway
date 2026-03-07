@@ -13,7 +13,9 @@ public class DynamoDbOutboxStoreTests
     public async Task TryDequeueAsync_Paginates_WhenFirstPageHasNoRunnableItems()
     {
         var dynamoDb = Substitute.For<IAmazonDynamoDB>();
-        var store = new DynamoDbOutboxStore(dynamoDb, new DynamoDbOptions { TableName = "test-table" });
+        var clock = Substitute.For<IClock>();
+        clock.UtcNow.Returns(new DateTimeOffset(2026, 3, 7, 0, 0, 0, TimeSpan.Zero));
+        var store = new DynamoDbOutboxStore(dynamoDb, new DynamoDbOptions { TableName = "test-table" }, clock);
 
         var message = BuildOutboxMessage("outbox-2");
         var payload = SerializeOutboxMessage(message);
@@ -60,7 +62,9 @@ public class DynamoDbOutboxStoreTests
     public async Task TryDequeueAsync_Continues_WhenFirstClaimFailsConditionCheck()
     {
         var dynamoDb = Substitute.For<IAmazonDynamoDB>();
-        var store = new DynamoDbOutboxStore(dynamoDb, new DynamoDbOptions { TableName = "test-table" });
+        var clock = Substitute.For<IClock>();
+        clock.UtcNow.Returns(new DateTimeOffset(2026, 3, 7, 0, 0, 0, TimeSpan.Zero));
+        var store = new DynamoDbOutboxStore(dynamoDb, new DynamoDbOptions { TableName = "test-table" }, clock);
 
         var firstMessage = BuildOutboxMessage("outbox-1");
         var secondMessage = BuildOutboxMessage("outbox-2");
@@ -101,6 +105,32 @@ public class DynamoDbOutboxStoreTests
         Assert.That(dequeued, Is.Not.Null);
         Assert.That(dequeued!.OutboxId, Is.EqualTo("outbox-2"));
         await dynamoDb.Received(2).UpdateItemAsync(Arg.Any<UpdateItemRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task TryDequeueAsync_UsesInjectedClockForLeaseCutoff()
+    {
+        var dynamoDb = Substitute.For<IAmazonDynamoDB>();
+        var now = new DateTimeOffset(2026, 3, 7, 12, 0, 0, TimeSpan.Zero);
+        var clock = Substitute.For<IClock>();
+        clock.UtcNow.Returns(now);
+        var store = new DynamoDbOutboxStore(dynamoDb, new DynamoDbOptions { TableName = "test-table" }, clock);
+
+        dynamoDb.QueryAsync(Arg.Any<QueryRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new QueryResponse
+            {
+                Items = new List<Dictionary<string, AttributeValue>>(),
+                LastEvaluatedKey = new Dictionary<string, AttributeValue>()
+            }));
+
+        await store.TryDequeueAsync(CancellationToken.None);
+
+        var expectedCutoff = now.Subtract(TimeSpan.FromMinutes(1)).UtcDateTime.ToString("O");
+        await dynamoDb.Received(1).QueryAsync(
+            Arg.Is<QueryRequest>(request =>
+                request.ExpressionAttributeValues.ContainsKey(":cutoff")
+                && request.ExpressionAttributeValues[":cutoff"].S == expectedCutoff),
+            Arg.Any<CancellationToken>());
     }
 
     private static OutboxDispatchMessage BuildOutboxMessage(string outboxId)

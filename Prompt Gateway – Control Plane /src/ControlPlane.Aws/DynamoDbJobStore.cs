@@ -73,12 +73,20 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore
 
     public async Task UpdateAsync(JobRecord job, CancellationToken cancellationToken)
     {
-        await UpdateAsync(job, job.UpdatedAt, cancellationToken);
+        await UpdateInternalAsync(job, expectedUpdatedAt: null, cancellationToken);
     }
 
     public async Task UpdateAsync(
         JobRecord job,
         DateTimeOffset expectedUpdatedAt,
+        CancellationToken cancellationToken)
+    {
+        await UpdateInternalAsync(job, expectedUpdatedAt, cancellationToken);
+    }
+
+    private async Task UpdateInternalAsync(
+        JobRecord job,
+        DateTimeOffset? expectedUpdatedAt,
         CancellationToken cancellationToken)
     {
         EnsureConfigured();
@@ -92,7 +100,6 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore
                 [SortKey] = Attr(JobSortKey)
             },
             UpdateExpression = "SET #snapshot = :snapshot, #updatedAt = :updatedAt",
-            ConditionExpression = "(#updatedAt = :expectedUpdatedAt) OR attribute_not_exists(#updatedAt)",
             ExpressionAttributeNames = new Dictionary<string, string>
             {
                 ["#snapshot"] = SnapshotField,
@@ -101,10 +108,15 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore
             ExpressionAttributeValues = new Dictionary<string, AttributeValue>
             {
                 [":snapshot"] = Attr(JsonSerializer.Serialize(snapshot, SerializerOptions)),
-                [":updatedAt"] = Attr(FormatTimestamp(job.UpdatedAt)),
-                [":expectedUpdatedAt"] = Attr(FormatTimestamp(expectedUpdatedAt))
+                [":updatedAt"] = Attr(FormatTimestamp(job.UpdatedAt))
             }
         };
+
+        if (expectedUpdatedAt.HasValue)
+        {
+            request.ConditionExpression = "(#updatedAt = :expectedUpdatedAt) OR attribute_not_exists(#updatedAt)";
+            request.ExpressionAttributeValues[":expectedUpdatedAt"] = Attr(FormatTimestamp(expectedUpdatedAt.Value));
+        }
 
         try
         {
@@ -112,9 +124,14 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore
         }
         catch (ConditionalCheckFailedException ex)
         {
-            throw new OptimisticConcurrencyException(
-                $"Job '{job.JobId}' update conflict detected. Reload and retry.",
-                ex);
+            if (expectedUpdatedAt.HasValue)
+            {
+                throw new OptimisticConcurrencyException(
+                    $"Job '{job.JobId}' update conflict detected. Reload and retry.",
+                    ex);
+            }
+
+            throw;
         }
     }
 

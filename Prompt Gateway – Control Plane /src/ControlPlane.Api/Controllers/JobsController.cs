@@ -57,11 +57,7 @@ public sealed class JobsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> ListJobs([FromQuery] int? limit, CancellationToken cancellationToken)
     {
-        var count = limit.GetValueOrDefault(50);
-        if (count <= 0)
-        {
-            return BadRequest(new { error = "limit must be positive" });
-        }
+        var count = Math.Clamp(limit.GetValueOrDefault(50), 1, 200);
 
         var jobs = await _orchestrator.ListJobsAsync(count, cancellationToken);
         return Ok(jobs);

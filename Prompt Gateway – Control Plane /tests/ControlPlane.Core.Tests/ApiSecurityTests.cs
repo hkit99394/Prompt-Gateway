@@ -74,10 +74,24 @@ public class ApiSecurityTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
+    [Test]
+    public async Task ListJobs_LimitGreaterThanMaximum_ClampsToMaximum()
+    {
+        await using var factory = new ControlPlaneApiFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(ApiKeyAuthenticationHandler.HeaderName, ControlPlaneApiFactory.ValidApiKey);
+
+        var response = await client.GetAsync("/jobs?limit=1000000");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        await factory.JobStore.Received(1).ListAsync(200, Arg.Any<CancellationToken>());
+    }
+
     private sealed class ControlPlaneApiFactory : WebApplicationFactory<Program>
     {
         public const string ValidApiKey = "test-api-key";
         public const string RotatedApiKey = "next-test-api-key";
+        public IJobStore JobStore { get; } = Substitute.For<IJobStore>();
 
         public ControlPlaneApiFactory()
         {
@@ -108,11 +122,10 @@ public class ApiSecurityTests
                 services.RemoveAll<IDeduplicationStore>();
                 services.RemoveAll<IResultStore>();
 
-                var jobStore = Substitute.For<IJobStore>();
-                jobStore.ListAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+                JobStore.ListAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<JobSummary>>(Array.Empty<JobSummary>()));
 
-                services.AddSingleton(jobStore);
+                services.AddSingleton(JobStore);
                 services.AddSingleton(Substitute.For<IJobEventStore>());
                 services.AddSingleton(Substitute.For<IOutboxStore>());
                 services.AddSingleton(Substitute.For<IDeduplicationStore>());

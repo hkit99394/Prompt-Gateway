@@ -1,4 +1,7 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Linq;
+using System.Text;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
@@ -36,7 +39,12 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
         }
 
         var providedApiKey = headerValue.ToString();
-        var isValid = configuredApiKeys.Contains(providedApiKey, StringComparer.Ordinal);
+        var providedBytes = Encoding.UTF8.GetBytes(providedApiKey);
+        var isValid = configuredApiKeys.Any(configuredApiKey =>
+        {
+            var configuredBytes = Encoding.UTF8.GetBytes(configuredApiKey);
+            return CryptographicOperations.FixedTimeEquals(configuredBytes, providedBytes);
+        });
         if (!isValid)
         {
             return Task.FromResult(AuthenticateResult.Fail("Invalid API key."));

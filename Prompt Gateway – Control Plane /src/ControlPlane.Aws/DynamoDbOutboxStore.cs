@@ -17,11 +17,13 @@ public sealed class DynamoDbOutboxStore : DynamoDbStoreBase, IOutboxStore
     private const string ErrorField = "error";
     private const string OutboxPartition = "OUTBOX";
     private static readonly TimeSpan ProcessingLease = TimeSpan.FromMinutes(1);
+    private readonly IClock _clock;
     private readonly string _processingOwner = $"worker-{Guid.NewGuid():N}";
 
-    public DynamoDbOutboxStore(IAmazonDynamoDB dynamoDb, DynamoDbOptions options)
+    public DynamoDbOutboxStore(IAmazonDynamoDB dynamoDb, DynamoDbOptions options, IClock clock)
         : base(dynamoDb, options)
     {
+        _clock = clock;
     }
 
     public async Task EnqueueDispatchAsync(OutboxDispatchMessage message, CancellationToken cancellationToken)
@@ -52,7 +54,7 @@ public sealed class DynamoDbOutboxStore : DynamoDbStoreBase, IOutboxStore
     public async Task<OutboxDispatchMessage?> TryDequeueAsync(CancellationToken cancellationToken)
     {
         EnsureConfigured();
-        var cutoff = FormatTimestamp(DateTimeOffset.UtcNow.Subtract(ProcessingLease));
+        var cutoff = FormatTimestamp(_clock.UtcNow.Subtract(ProcessingLease));
         Dictionary<string, AttributeValue>? startKey = null;
 
         while (true)
@@ -89,7 +91,7 @@ public sealed class DynamoDbOutboxStore : DynamoDbStoreBase, IOutboxStore
                     continue;
                 }
 
-                var now = FormatTimestamp(DateTimeOffset.UtcNow);
+                var now = FormatTimestamp(_clock.UtcNow);
                 try
                 {
                     await DynamoDb.UpdateItemAsync(new UpdateItemRequest

@@ -26,17 +26,6 @@ public sealed class DispatchOutboxProcessor
             return false;
         }
 
-        try
-        {
-            await _dispatchQueue.PublishAsync(next.Message, cancellationToken);
-            await _outboxStore.MarkDispatchedAsync(next.OutboxId, cancellationToken);
-        }
-        catch
-        {
-            await _outboxStore.ReleaseAsync(next.OutboxId, cancellationToken);
-            throw;
-        }
-
         using (_logger.BeginScope(new Dictionary<string, object?>
                {
                    ["job_id"] = next.Message.JobId,
@@ -44,6 +33,17 @@ public sealed class DispatchOutboxProcessor
                    ["provider"] = next.Message.Provider
                }))
         {
+            try
+            {
+                await _dispatchQueue.PublishAsync(next.Message, cancellationToken);
+                await _outboxStore.MarkDispatchedAsync(next.OutboxId, cancellationToken);
+            }
+            catch
+            {
+                await _outboxStore.ReleaseAsync(next.OutboxId, cancellationToken);
+                throw;
+            }
+
             _logger.LogInformation("Dispatched outbox message {OutboxId}.", next.OutboxId);
         }
 

@@ -38,38 +38,49 @@ public sealed class DynamoDbJobEventStore : DynamoDbStoreBase, IJobEventStore
     public async Task<IReadOnlyList<JobEvent>> GetAsync(string jobId, CancellationToken cancellationToken)
     {
         EnsureConfigured();
-        var request = new QueryRequest
-        {
-            TableName = Options.TableName,
-            KeyConditionExpression = "#pk = :pk AND begins_with(#sk, :prefix)",
-            ExpressionAttributeNames = new Dictionary<string, string>
-            {
-                ["#pk"] = PartitionKey,
-                ["#sk"] = SortKey
-            },
-            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
-            {
-                [":pk"] = Attr($"JOB#{jobId}"),
-                [":prefix"] = Attr(EventPrefix)
-            },
-            ScanIndexForward = true
-        };
-
-        var response = await DynamoDb.QueryAsync(request, cancellationToken);
         var events = new List<JobEvent>();
+        Dictionary<string, AttributeValue>? startKey = null;
 
-        foreach (var item in response.Items)
+        while (true)
         {
-            var payload = GetString(item, EventField);
-            if (string.IsNullOrWhiteSpace(payload))
+            var request = new QueryRequest
             {
-                continue;
+                TableName = Options.TableName,
+                KeyConditionExpression = "#pk = :pk AND begins_with(#sk, :prefix)",
+                ExpressionAttributeNames = new Dictionary<string, string>
+                {
+                    ["#pk"] = PartitionKey,
+                    ["#sk"] = SortKey
+                },
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":pk"] = Attr($"JOB#{jobId}"),
+                    [":prefix"] = Attr(EventPrefix)
+                },
+                ScanIndexForward = true,
+                ExclusiveStartKey = startKey
+            };
+
+            var response = await DynamoDb.QueryAsync(request, cancellationToken);
+            foreach (var item in response.Items)
+            {
+                var payload = GetString(item, EventField);
+                if (string.IsNullOrWhiteSpace(payload))
+                {
+                    continue;
+                }
+
+                var jobEvent = JsonSerializer.Deserialize<JobEvent>(payload, SerializerOptions);
+                if (jobEvent is not null)
+                {
+                    events.Add(jobEvent);
+                }
             }
 
-            var jobEvent = JsonSerializer.Deserialize<JobEvent>(payload, SerializerOptions);
-            if (jobEvent is not null)
+            startKey = response.LastEvaluatedKey;
+            if (startKey is null || startKey.Count == 0)
             {
-                events.Add(jobEvent);
+                break;
             }
         }
 

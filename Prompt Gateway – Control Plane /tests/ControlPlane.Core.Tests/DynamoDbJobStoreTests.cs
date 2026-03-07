@@ -9,6 +9,36 @@ namespace ControlPlane.Core.Tests;
 public class DynamoDbJobStoreTests
 {
     [Test]
+    public async Task UpdateAsync_WithoutExpectedTimestamp_DoesNotUseConditionExpression()
+    {
+        var dynamoDb = Substitute.For<IAmazonDynamoDB>();
+        var store = new DynamoDbJobStore(dynamoDb, new DynamoDbOptions { TableName = "test-table" });
+        var createdAt = new DateTimeOffset(2026, 3, 8, 0, 0, 0, TimeSpan.Zero);
+        var updatedAt = createdAt.AddMinutes(1);
+        UpdateItemRequest? capturedRequest = null;
+        dynamoDb
+            .When(x => x.UpdateItemAsync(Arg.Any<UpdateItemRequest>(), Arg.Any<CancellationToken>()))
+            .Do(callInfo => capturedRequest = callInfo.ArgAt<UpdateItemRequest>(0));
+
+        var request = new CanonicalJobRequest
+        {
+            JobId = "job-0",
+            AttemptId = "attempt-0",
+            TraceId = "trace-0",
+            TaskType = "chat_completion"
+        };
+
+        var job = JobRecord.Create(request, createdAt);
+        job.SetState(JobState.Routed, updatedAt);
+
+        await store.UpdateAsync(job, CancellationToken.None);
+
+        Assert.That(capturedRequest, Is.Not.Null);
+        Assert.That(capturedRequest!.ConditionExpression, Is.Null.Or.Empty);
+        Assert.That(capturedRequest.ExpressionAttributeValues.ContainsKey(":expectedUpdatedAt"), Is.False);
+    }
+
+    [Test]
     public async Task UpdateAsync_UsesExpectedUpdatedAtCondition()
     {
         var dynamoDb = Substitute.For<IAmazonDynamoDB>();

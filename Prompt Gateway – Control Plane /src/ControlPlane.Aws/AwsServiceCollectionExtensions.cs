@@ -1,6 +1,7 @@
 using Amazon.DynamoDBv2;
 using Amazon.SQS;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ControlPlane.Core;
 
 namespace ControlPlane.Aws;
@@ -12,6 +13,7 @@ public static class AwsServiceCollectionExtensions
         AwsQueueOptions queueOptions,
         DynamoDbOptions dynamoOptions)
     {
+        services.TryAddSingleton<IClock, SystemClock>();
         services.AddSingleton(queueOptions);
         services.AddSingleton(dynamoOptions);
         services.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient());
