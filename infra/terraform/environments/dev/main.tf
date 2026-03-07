@@ -16,9 +16,10 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Module calls will be added in T-2.7.x
-# module "network" { ... }
-# module "dynamodb" { ... }
-# module "sqs" { ... }
-# module "iam" { ... }
-# module "ecs_service" { ... }
+module "network" {
+  source = "../../modules/network"
+
+  environment        = var.environment
+  vpc_cidr           = "10.0.0.0/16"
+  single_nat_gateway = true
+}

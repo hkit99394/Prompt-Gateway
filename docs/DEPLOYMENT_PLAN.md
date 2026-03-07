@@ -289,7 +289,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 
 ### IaC
 - [x] T-2.1.1 – T-2.1.5: Repository structure
-- [ ] T-2.2.1 – T-2.2.10: Network module
+- [x] T-2.2.1 – T-2.2.10: Network module
 - [ ] T-2.3.1 – T-2.3.6: DynamoDB module
 - [ ] T-2.4.1 – T-2.4.6: SQS module
 - [ ] T-2.8.1 – T-2.8.3: S3 module
