@@ -73,6 +73,14 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore
 
     public async Task UpdateAsync(JobRecord job, CancellationToken cancellationToken)
     {
+        await UpdateAsync(job, job.UpdatedAt, cancellationToken);
+    }
+
+    public async Task UpdateAsync(
+        JobRecord job,
+        DateTimeOffset expectedUpdatedAt,
+        CancellationToken cancellationToken)
+    {
         EnsureConfigured();
         var snapshot = ToSnapshot(job);
         var request = new UpdateItemRequest
@@ -84,6 +92,7 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore
                 [SortKey] = Attr(JobSortKey)
             },
             UpdateExpression = "SET #snapshot = :snapshot, #updatedAt = :updatedAt",
+            ConditionExpression = "(#updatedAt = :expectedUpdatedAt) OR attribute_not_exists(#updatedAt)",
             ExpressionAttributeNames = new Dictionary<string, string>
             {
                 ["#snapshot"] = SnapshotField,
@@ -92,11 +101,21 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore
             ExpressionAttributeValues = new Dictionary<string, AttributeValue>
             {
                 [":snapshot"] = Attr(JsonSerializer.Serialize(snapshot, SerializerOptions)),
-                [":updatedAt"] = Attr(FormatTimestamp(job.UpdatedAt))
+                [":updatedAt"] = Attr(FormatTimestamp(job.UpdatedAt)),
+                [":expectedUpdatedAt"] = Attr(FormatTimestamp(expectedUpdatedAt))
             }
         };
 
-        await DynamoDb.UpdateItemAsync(request, cancellationToken);
+        try
+        {
+            await DynamoDb.UpdateItemAsync(request, cancellationToken);
+        }
+        catch (ConditionalCheckFailedException ex)
+        {
+            throw new OptimisticConcurrencyException(
+                $"Job '{job.JobId}' update conflict detected. Reload and retry.",
+                ex);
+        }
     }
 
     public async Task<IReadOnlyList<JobSummary>> ListAsync(int limit, CancellationToken cancellationToken)

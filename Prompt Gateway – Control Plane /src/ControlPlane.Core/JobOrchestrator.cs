@@ -93,11 +93,12 @@ public sealed class JobOrchestrator
         }
 
         var decision = await _routingPolicy.DecideAsync(job.Request, cancellationToken);
+        var expectedUpdatedAt = job.UpdatedAt;
         var now = _clock.UtcNow;
         attempt.ApplyRouting(decision, now);
         job.SetState(JobState.Routed, now);
 
-        await _jobStore.UpdateAsync(job, cancellationToken);
+        await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
         await _eventStore.AppendAsync(JobEvent.Routed(jobId, attempt.AttemptId, now, decision), cancellationToken);
 
         using (_logger.BeginScope(new Dictionary<string, object?>
@@ -136,6 +137,7 @@ public sealed class JobOrchestrator
             throw new InvalidOperationException($"Attempt '{attemptId}' has not been routed.");
         }
 
+        var expectedUpdatedAt = job.UpdatedAt;
         var now = _clock.UtcNow;
         var dispatch = new DispatchMessage
         {
@@ -154,7 +156,7 @@ public sealed class JobOrchestrator
         attempt.SetState(AttemptState.Dispatched, now);
         job.SetState(JobState.Dispatched, now);
 
-        await _jobStore.UpdateAsync(job, cancellationToken);
+        await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
         await _eventStore.AppendAsync(JobEvent.Dispatched(jobId, attemptId, now, dispatch), cancellationToken);
 
         using (_logger.BeginScope(new Dictionary<string, object?>
@@ -207,6 +209,7 @@ public sealed class JobOrchestrator
             ["model"] = result.Model
         });
 
+        var expectedUpdatedAt = job.UpdatedAt;
         var now = _clock.UtcNow;
 
         if (result.IsSuccess)
@@ -217,7 +220,7 @@ public sealed class JobOrchestrator
 
             await _resultStore.SaveAttemptResultAsync(job.JobId, attempt.AttemptId, response, cancellationToken);
             await _resultStore.SaveFinalResultAsync(job.JobId, response, cancellationToken);
-            await _jobStore.UpdateAsync(job, cancellationToken);
+            await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
             await _eventStore.AppendAsync(JobEvent.Completed(job.JobId, attempt.AttemptId, now, response), cancellationToken);
             await _dedupeStore.MarkCompletedAsync(job.JobId, attempt.AttemptId, cancellationToken);
 
@@ -254,7 +257,7 @@ public sealed class JobOrchestrator
 
             var outbox = new OutboxDispatchMessage(_idGenerator.NewId("outbox"), dispatch, now);
             await _outboxStore.EnqueueDispatchAsync(outbox, cancellationToken);
-            await _jobStore.UpdateAsync(job, cancellationToken);
+            await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
             await _dedupeStore.MarkCompletedAsync(job.JobId, attempt.AttemptId, cancellationToken);
 
             _logger.LogWarning("Result failed; retrying with provider {Provider}.", retryPlan.Provider);
@@ -267,7 +270,7 @@ public sealed class JobOrchestrator
 
         await _resultStore.SaveAttemptResultAsync(job.JobId, attempt.AttemptId, errorResponse, cancellationToken);
         await _resultStore.SaveFinalResultAsync(job.JobId, errorResponse, cancellationToken);
-        await _jobStore.UpdateAsync(job, cancellationToken);
+        await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
 
         if (errorResponse.Error is not null)
         {

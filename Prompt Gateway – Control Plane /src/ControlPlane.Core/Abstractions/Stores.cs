@@ -5,6 +5,7 @@ public interface IJobStore
     Task CreateAsync(JobRecord job, CancellationToken cancellationToken);
     Task<JobRecord?> GetAsync(string jobId, CancellationToken cancellationToken);
     Task UpdateAsync(JobRecord job, CancellationToken cancellationToken);
+    Task UpdateAsync(JobRecord job, DateTimeOffset expectedUpdatedAt, CancellationToken cancellationToken);
     Task<IReadOnlyList<JobSummary>> ListAsync(int limit, CancellationToken cancellationToken);
 }
 

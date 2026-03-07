@@ -109,6 +109,7 @@ public class JobOrchestratorTests
 
         await jobStore.Received(1).UpdateAsync(
             Arg.Is<JobRecord>(record => record.State == JobState.Routed),
+            Arg.Any<DateTimeOffset>(),
             Arg.Any<CancellationToken>());
 
         await eventStore.Received(1).AppendAsync(
@@ -178,6 +179,7 @@ public class JobOrchestratorTests
 
         await jobStore.Received(1).UpdateAsync(
             Arg.Is<JobRecord>(record => record.State == JobState.Dispatched),
+            Arg.Any<DateTimeOffset>(),
             Arg.Any<CancellationToken>());
 
         await eventStore.Received(1).AppendAsync(

@@ -11,6 +11,9 @@ obj/
 .vs/
 .vscode/
 .idea/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 
 ## OS files
 .DS_Store
