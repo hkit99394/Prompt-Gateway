@@ -5,6 +5,9 @@
 - Configure at least one API key using one of:
   - `ApiSecurity__ApiKeys__0`, `ApiSecurity__ApiKeys__1`, ...
   - `ApiSecurity__ApiKey` (single key fallback)
+- Configure DynamoDB storage:
+  - `AwsStorage__TableName`
+  - `AwsStorage__JobListIndexName` (defaults to `gsi1`, expected key schema: `gsi1pk` + `gsi1sk`)
 - Do not store production keys in `appsettings.json`.
 - Keep keys in an environment variable source or external secret manager.
 

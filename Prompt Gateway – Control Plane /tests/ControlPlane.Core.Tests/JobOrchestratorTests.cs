@@ -186,7 +186,83 @@ public class JobOrchestratorTests
             Arg.Is<JobEvent>(evt => evt.Type == JobEventType.Dispatched),
             Arg.Any<CancellationToken>());
 
+        Received.InOrder(async () =>
+        {
+            await jobStore.UpdateAsync(
+                Arg.Any<JobRecord>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<CancellationToken>());
+            await outboxStore.EnqueueDispatchAsync(
+                Arg.Any<OutboxDispatchMessage>(),
+                Arg.Any<CancellationToken>());
+            await eventStore.AppendAsync(
+                Arg.Any<JobEvent>(),
+                Arg.Any<CancellationToken>());
+        });
+
         Assert.That(dispatch.IdempotencyKey, Is.EqualTo("job-3:attempt-3"));
+    }
+
+    [Test]
+    public async Task DispatchAsync_UsesTransactionalJobStore_WhenAvailable()
+    {
+        var transactionalJobStore = Substitute.For<ITransactionalJobStore>();
+        var eventStore = Substitute.For<IJobEventStore>();
+        var routingPolicy = Substitute.For<IRoutingPolicy>();
+        var outboxStore = Substitute.For<IOutboxStore>();
+        var dedupeStore = Substitute.For<IDeduplicationStore>();
+        var assembler = Substitute.For<ICanonicalResponseAssembler>();
+        var resultStore = Substitute.For<IResultStore>();
+        var retryPlanner = Substitute.For<IRetryPlanner>();
+        var idGenerator = Substitute.For<IIdGenerator>();
+        var clock = Substitute.For<IClock>();
+        var logger = Substitute.For<ILogger<JobOrchestrator>>();
+
+        idGenerator.NewId("outbox").Returns("outbox-transactional");
+        var now = new DateTimeOffset(2026, 2, 8, 0, 0, 0, TimeSpan.Zero);
+        clock.UtcNow.Returns(now);
+
+        var request = new CanonicalJobRequest
+        {
+            JobId = "job-transactional",
+            AttemptId = "attempt-transactional",
+            TraceId = "trace-transactional",
+            TaskType = "chat_completion"
+        };
+
+        var job = JobRecord.Create(request, now);
+        var attempt = job.GetAttempt("attempt-transactional")!;
+        attempt.ApplyRouting(new RoutingDecision
+        {
+            Provider = "openai",
+            Model = "gpt-4.1",
+            PolicyVersion = "v1"
+        }, now);
+        transactionalJobStore.GetAsync("job-transactional", Arg.Any<CancellationToken>()).Returns(job);
+
+        var orchestrator = new JobOrchestrator(
+            logger,
+            transactionalJobStore,
+            eventStore,
+            routingPolicy,
+            outboxStore,
+            dedupeStore,
+            assembler,
+            resultStore,
+            retryPlanner,
+            idGenerator,
+            clock);
+
+        await orchestrator.DispatchAsync("job-transactional", "attempt-transactional", CancellationToken.None);
+
+        await transactionalJobStore.Received(1).UpdateAndEnqueueDispatchAsync(
+            Arg.Is<JobRecord>(record => record.State == JobState.Dispatched),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Is<OutboxDispatchMessage>(message => message.OutboxId == "outbox-transactional"),
+            Arg.Is<JobEvent>(evt => evt.Type == JobEventType.Dispatched),
+            Arg.Any<CancellationToken>());
+        await outboxStore.DidNotReceive().EnqueueDispatchAsync(Arg.Any<OutboxDispatchMessage>(), Arg.Any<CancellationToken>());
+        await eventStore.DidNotReceive().AppendAsync(Arg.Any<JobEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -369,6 +445,93 @@ public class JobOrchestratorTests
         await eventStore.Received(1).AppendAsync(
             Arg.Is<JobEvent>(evt => evt.Type == JobEventType.Retried),
             Arg.Any<CancellationToken>());
+
+        Received.InOrder(async () =>
+        {
+            await jobStore.UpdateAsync(
+                Arg.Any<JobRecord>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<CancellationToken>());
+            await outboxStore.EnqueueDispatchAsync(
+                Arg.Any<OutboxDispatchMessage>(),
+                Arg.Any<CancellationToken>());
+            await eventStore.AppendAsync(
+                Arg.Any<JobEvent>(),
+                Arg.Any<CancellationToken>());
+            await dedupeStore.MarkCompletedAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Test]
+    public async Task IngestResultAsync_RetryPath_UsesTransactionalJobStore_WhenAvailable()
+    {
+        var transactionalJobStore = Substitute.For<ITransactionalJobStore>();
+        var eventStore = Substitute.For<IJobEventStore>();
+        var routingPolicy = Substitute.For<IRoutingPolicy>();
+        var outboxStore = Substitute.For<IOutboxStore>();
+        var dedupeStore = Substitute.For<IDeduplicationStore>();
+        var assembler = Substitute.For<ICanonicalResponseAssembler>();
+        var resultStore = Substitute.For<IResultStore>();
+        var retryPlanner = Substitute.For<IRetryPlanner>();
+        var idGenerator = Substitute.For<IIdGenerator>();
+        var clock = Substitute.For<IClock>();
+        var logger = Substitute.For<ILogger<JobOrchestrator>>();
+
+        var now = new DateTimeOffset(2026, 2, 8, 0, 0, 0, TimeSpan.Zero);
+        clock.UtcNow.Returns(now);
+        dedupeStore.TryStartAsync("job-transactional-retry", "attempt-transactional-retry", Arg.Any<CancellationToken>())
+            .Returns(true);
+        idGenerator.NewId("attempt").Returns("attempt-transactional-retry-b");
+        idGenerator.NewId("outbox").Returns("outbox-transactional-retry");
+
+        var request = new CanonicalJobRequest
+        {
+            JobId = "job-transactional-retry",
+            AttemptId = "attempt-transactional-retry",
+            TraceId = "trace-transactional-retry",
+            TaskType = "chat_completion"
+        };
+
+        var job = JobRecord.Create(request, now);
+        transactionalJobStore.GetAsync("job-transactional-retry", Arg.Any<CancellationToken>()).Returns(job);
+        retryPlanner.PlanRetry(job, Arg.Any<JobAttempt>(), Arg.Any<ProviderResultEvent>())
+            .Returns(RetryPlan.ForProvider("anthropic", "claude-3", "fallback"));
+
+        var orchestrator = new JobOrchestrator(
+            logger,
+            transactionalJobStore,
+            eventStore,
+            routingPolicy,
+            outboxStore,
+            dedupeStore,
+            assembler,
+            resultStore,
+            retryPlanner,
+            idGenerator,
+            clock);
+
+        var outcome = await orchestrator.IngestResultAsync(new ProviderResultEvent
+        {
+            JobId = "job-transactional-retry",
+            AttemptId = "attempt-transactional-retry",
+            Provider = "openai",
+            Model = "gpt-4.1",
+            IsSuccess = false,
+            Error = new CanonicalError("timeout", "Provider timeout")
+        }, CancellationToken.None);
+
+        Assert.That(outcome.Status, Is.EqualTo(ResultIngestionStatus.Retrying));
+        await transactionalJobStore.Received(1).UpdateAndEnqueueDispatchAsync(
+            Arg.Is<JobRecord>(record => record.State == JobState.Retrying),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Is<OutboxDispatchMessage>(message => message.OutboxId == "outbox-transactional-retry"),
+            Arg.Is<JobEvent>(evt => evt.Type == JobEventType.Retried),
+            Arg.Any<CancellationToken>());
+        await outboxStore.DidNotReceive().EnqueueDispatchAsync(Arg.Any<OutboxDispatchMessage>(), Arg.Any<CancellationToken>());
+        await eventStore.DidNotReceive().AppendAsync(Arg.Any<JobEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Test]

@@ -150,13 +150,26 @@ public sealed class JobOrchestrator
             Request = job.Request
         };
 
-        var outbox = new OutboxDispatchMessage(_idGenerator.NewId("outbox"), dispatch, now);
-        await _outboxStore.EnqueueDispatchAsync(outbox, cancellationToken);
         attempt.SetState(AttemptState.Dispatched, now);
         job.SetState(JobState.Dispatched, now);
 
-        await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
-        await _eventStore.AppendAsync(JobEvent.Dispatched(jobId, attemptId, now, dispatch), cancellationToken);
+        var outbox = new OutboxDispatchMessage(_idGenerator.NewId("outbox"), dispatch, now);
+        var dispatchedEvent = JobEvent.Dispatched(jobId, attemptId, now, dispatch);
+        if (_jobStore is ITransactionalJobStore transactionalJobStore)
+        {
+            await transactionalJobStore.UpdateAndEnqueueDispatchAsync(
+                job,
+                expectedUpdatedAt,
+                outbox,
+                dispatchedEvent,
+                cancellationToken);
+        }
+        else
+        {
+            await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
+            await _outboxStore.EnqueueDispatchAsync(outbox, cancellationToken);
+            await _eventStore.AppendAsync(dispatchedEvent, cancellationToken);
+        }
 
         using (_logger.BeginScope(new Dictionary<string, object?>
                {
@@ -241,8 +254,6 @@ public sealed class JobOrchestrator
             }, now);
 
             job.SetState(JobState.Retrying, now);
-            await _eventStore.AppendAsync(JobEvent.Retried(job.JobId, attempt.AttemptId, now, retryPlan), cancellationToken);
-
             var dispatch = new DispatchMessage
             {
                 JobId = job.JobId,
@@ -255,8 +266,22 @@ public sealed class JobOrchestrator
             };
 
             var outbox = new OutboxDispatchMessage(_idGenerator.NewId("outbox"), dispatch, now);
-            await _outboxStore.EnqueueDispatchAsync(outbox, cancellationToken);
-            await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
+            var retriedEvent = JobEvent.Retried(job.JobId, attempt.AttemptId, now, retryPlan);
+            if (_jobStore is ITransactionalJobStore transactionalJobStore)
+            {
+                await transactionalJobStore.UpdateAndEnqueueDispatchAsync(
+                    job,
+                    expectedUpdatedAt,
+                    outbox,
+                    retriedEvent,
+                    cancellationToken);
+            }
+            else
+            {
+                await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
+                await _outboxStore.EnqueueDispatchAsync(outbox, cancellationToken);
+                await _eventStore.AppendAsync(retriedEvent, cancellationToken);
+            }
             await _dedupeStore.MarkCompletedAsync(job.JobId, attempt.AttemptId, cancellationToken);
 
             _logger.LogWarning("Result failed; retrying with provider {Provider}.", retryPlan.Provider);

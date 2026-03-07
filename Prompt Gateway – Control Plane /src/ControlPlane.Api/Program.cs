@@ -47,7 +47,8 @@ var awsQueueOptions = new AwsQueueOptions
 
 var dynamoOptions = new DynamoDbOptions
 {
-    TableName = builder.Configuration["AwsStorage:TableName"] ?? string.Empty
+    TableName = builder.Configuration["AwsStorage:TableName"] ?? string.Empty,
+    JobListIndexName = builder.Configuration["AwsStorage:JobListIndexName"] ?? "gsi1"
 };
 
 builder.Services.AddControlPlaneAws(awsQueueOptions, dynamoOptions);

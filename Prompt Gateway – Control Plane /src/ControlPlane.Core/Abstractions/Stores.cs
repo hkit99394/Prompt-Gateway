@@ -9,6 +9,16 @@ public interface IJobStore
     Task<IReadOnlyList<JobSummary>> ListAsync(int limit, CancellationToken cancellationToken);
 }
 
+public interface ITransactionalJobStore : IJobStore
+{
+    Task UpdateAndEnqueueDispatchAsync(
+        JobRecord job,
+        DateTimeOffset expectedUpdatedAt,
+        OutboxDispatchMessage message,
+        JobEvent jobEvent,
+        CancellationToken cancellationToken);
+}
+
 public interface IJobEventStore
 {
     Task AppendAsync(JobEvent jobEvent, CancellationToken cancellationToken);
