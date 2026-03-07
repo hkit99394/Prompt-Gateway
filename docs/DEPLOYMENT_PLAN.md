@@ -294,7 +294,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 - [x] T-2.4.1 – T-2.4.6: SQS module
 - [ ] T-2.7.1 – T-2.7.3: S3 module
 - [x] T-2.5.1 – T-2.5.10: IAM module
-- [ ] T-2.6.1 – T-2.6.10: ECS service module
+- [x] T-2.6.1 – T-2.6.10: ECS service module
 - [ ] T-2.8.1 – T-2.8.4: Environment configs
 
 ### CI

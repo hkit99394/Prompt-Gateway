@@ -45,3 +45,28 @@ module "iam" {
   dispatch_queue_arn  = module.sqs.dispatch_queue_arn
   result_queue_arn   = module.sqs.result_queue_arn
 }
+
+module "ecs_service" {
+  source = "../../modules/ecs-service"
+
+  environment                   = var.environment
+  vpc_id                        = module.network.vpc_id
+  private_subnet_ids            = module.network.private_subnet_ids
+  public_subnet_ids             = module.network.public_subnet_ids
+  alb_security_group_id         = module.network.alb_security_group_id
+  ecs_api_security_group_id     = module.network.ecs_api_security_group_id
+  ecs_worker_security_group_id  = module.network.ecs_worker_security_group_id
+  ecs_execution_role_arn        = module.iam.ecs_execution_role_arn
+  control_plane_task_role_arn   = module.iam.control_plane_task_role_arn
+  provider_worker_task_role_arn = module.iam.provider_worker_task_role_arn
+  dynamodb_table_name           = module.dynamodb.table_name
+  dynamodb_gsi_name             = module.dynamodb.gsi_name
+  dispatch_queue_url            = module.sqs.dispatch_queue_url
+  result_queue_url              = module.sqs.result_queue_url
+  api_desired_count             = 2
+  worker_desired_count          = 2
+  api_cpu                       = 512
+  api_memory                    = 1024
+  worker_cpu                    = 512
+  worker_memory                 = 1024
+}

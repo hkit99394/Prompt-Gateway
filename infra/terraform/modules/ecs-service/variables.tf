@@ -16,6 +16,11 @@ variable "private_subnet_ids" {
   type        = list(string)
 }
 
+variable "public_subnet_ids" {
+  description = "Public subnet IDs for ALB"
+  type        = list(string)
+}
+
 variable "alb_security_group_id" {
   description = "ALB security group ID"
   type        = string
@@ -29,4 +34,81 @@ variable "ecs_api_security_group_id" {
 variable "ecs_worker_security_group_id" {
   description = "ECS worker security group ID"
   type        = string
+}
+
+variable "ecs_execution_role_arn" {
+  description = "ECS task execution role ARN"
+  type        = string
+}
+
+variable "control_plane_task_role_arn" {
+  description = "Control Plane API task role ARN"
+  type        = string
+}
+
+variable "provider_worker_task_role_arn" {
+  description = "Provider Worker task role ARN"
+  type        = string
+}
+
+variable "dynamodb_table_name" {
+  description = "DynamoDB table name"
+  type        = string
+}
+
+variable "dynamodb_gsi_name" {
+  description = "DynamoDB GSI name for job listing"
+  type        = string
+}
+
+variable "dispatch_queue_url" {
+  description = "SQS dispatch queue URL"
+  type        = string
+}
+
+variable "result_queue_url" {
+  description = "SQS result queue URL"
+  type        = string
+}
+
+variable "api_desired_count" {
+  description = "Desired count for Control Plane API service"
+  type        = number
+  default     = 1
+}
+
+variable "worker_desired_count" {
+  description = "Desired count for Provider Worker service"
+  type        = number
+  default     = 1
+}
+
+variable "api_cpu" {
+  description = "CPU units for API task (1024 = 1 vCPU)"
+  type        = number
+  default     = 256
+}
+
+variable "api_memory" {
+  description = "Memory (MiB) for API task"
+  type        = number
+  default     = 512
+}
+
+variable "worker_cpu" {
+  description = "CPU units for worker task (1024 = 1 vCPU)"
+  type        = number
+  default     = 256
+}
+
+variable "worker_memory" {
+  description = "Memory (MiB) for worker task"
+  type        = number
+  default     = 512
+}
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN for HTTPS listener (optional; when empty, uses HTTP on port 80)"
+  type        = string
+  default     = ""
 }
