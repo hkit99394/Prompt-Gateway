@@ -11,3 +11,8 @@ variable "environment" {
   type        = string
   default     = "prod"
 }
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN for HTTPS (required for prod)"
+  type        = string
+}

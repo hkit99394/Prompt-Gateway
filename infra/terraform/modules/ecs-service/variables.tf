@@ -71,6 +71,18 @@ variable "result_queue_url" {
   type        = string
 }
 
+variable "prompts_bucket_name" {
+  description = "S3 prompts bucket name (optional; when set, passed to Provider Worker)"
+  type        = string
+  default     = ""
+}
+
+variable "results_bucket_name" {
+  description = "S3 results bucket name (optional; when set, passed to Provider Worker)"
+  type        = string
+  default     = ""
+}
+
 variable "api_desired_count" {
   description = "Desired count for Control Plane API service"
   type        = number

@@ -2,5 +2,6 @@
 # Usage: terraform plan -var-file=staging.tfvars
 # NEVER commit staging.tfvars - it may contain sensitive values
 
-aws_region  = "us-east-1"
-environment = "staging"
+aws_region      = "us-east-1"
+environment     = "staging"
+certificate_arn = "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID"  # ACM cert for HTTPS

@@ -2,5 +2,6 @@
 # Usage: terraform plan -var-file=prod.tfvars
 # NEVER commit prod.tfvars - it may contain sensitive values
 
-aws_region  = "us-east-1"
-environment = "prod"
+aws_region      = "us-east-1"
+environment     = "prod"
+certificate_arn = "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID"  # ACM cert for HTTPS

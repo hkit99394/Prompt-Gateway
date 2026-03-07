@@ -11,3 +11,8 @@ variable "environment" {
   type        = string
   default     = "staging"
 }
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN for HTTPS (required for staging)"
+  type        = string
+}

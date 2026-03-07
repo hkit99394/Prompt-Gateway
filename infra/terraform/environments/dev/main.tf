@@ -38,6 +38,12 @@ module "sqs" {
   environment = var.environment
 }
 
+module "s3" {
+  source = "../../modules/s3"
+
+  environment = var.environment
+}
+
 module "iam" {
   source = "../../modules/iam"
 
@@ -45,6 +51,8 @@ module "iam" {
   dynamodb_table_arn  = module.dynamodb.table_arn
   dispatch_queue_arn  = module.sqs.dispatch_queue_arn
   result_queue_arn   = module.sqs.result_queue_arn
+  prompts_bucket_arn  = module.s3.prompts_bucket_arn
+  results_bucket_arn  = module.s3.results_bucket_arn
 }
 
 module "ecs_service" {
@@ -64,6 +72,8 @@ module "ecs_service" {
   dynamodb_gsi_name            = module.dynamodb.gsi_name
   dispatch_queue_url           = module.sqs.dispatch_queue_url
   result_queue_url             = module.sqs.result_queue_url
+  prompts_bucket_name          = module.s3.prompts_bucket_name
+  results_bucket_name          = module.s3.results_bucket_name
   api_desired_count            = 1
   worker_desired_count         = 1
 }

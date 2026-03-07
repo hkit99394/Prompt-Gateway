@@ -5,11 +5,17 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 locals {
-  account_id = data.aws_caller_identity.current.account_id
-  region     = data.aws_region.current.name
-  secrets_prefix = "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:prompt-gateway/${var.environment}/*"
-  ssm_prefix     = "arn:aws:ssm:${local.region}:${local.account_id}:parameter/prompt-gateway/${var.environment}/*"
-  has_s3         = var.prompts_bucket_arn != "" && var.results_bucket_arn != ""
+  account_id   = data.aws_caller_identity.current.account_id
+  region       = data.aws_region.current.name
+  # Least privilege: Control Plane gets API keys only; Provider Worker gets OpenAI key only
+  control_plane_secrets_arns = [
+    "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:prompt-gateway/${var.environment}/api-keys*"
+  ]
+  provider_worker_secrets_arns = [
+    "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:prompt-gateway/${var.environment}/openai-api-key*"
+  ]
+  ssm_prefix = "arn:aws:ssm:${local.region}:${local.account_id}:parameter/prompt-gateway/${var.environment}/*"
+  has_s3     = var.prompts_bucket_arn != "" && var.results_bucket_arn != ""
 }
 
 # T-2.5.1: ECS task execution role (pull images, write logs)
@@ -150,9 +156,9 @@ resource "aws_iam_role_policy" "control_plane_secrets" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
+        Effect   = "Allow"
         Action   = "secretsmanager:GetSecretValue"
-        Resource = [local.secrets_prefix]
+        Resource = local.control_plane_secrets_arns
       }
     ]
   })
@@ -256,9 +262,9 @@ resource "aws_iam_role_policy" "provider_worker_secrets" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
+        Effect   = "Allow"
         Action   = "secretsmanager:GetSecretValue"
-        Resource = [local.secrets_prefix]
+        Resource = local.secrets_arns
       }
     ]
   })
