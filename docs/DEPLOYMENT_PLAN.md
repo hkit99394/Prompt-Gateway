@@ -2,6 +2,8 @@
 
 This document describes the target architecture, infrastructure-as-code layout, CI/CD workflows, and first-deploy procedures for the Prompt Gateway Control Plane and Provider Worker. Each section is broken into detailed steps and tasks.
 
+> **Implementation status:** T-2.1 creates the Terraform directory structure and skeleton files only. Module `main.tf` files contain placeholder comments with no resource definitions; outputs return `null`. **`terraform apply` will fail until T-2.2 through T-2.9 are implemented.** Complete the module implementation tasks before deploying.
+
 ---
 
 ## 1. Target Architecture
@@ -28,7 +30,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | Task | Description |
 |------|--------------|
 | T-2.1.1 | Create `infra/terraform/` directory |
-| T-2.1.2 | Create `infra/terraform/modules/` with subdirs: `network`, `dynamodb`, `sqs`, `ecs-service`, `iam` |
+| T-2.1.2 | Create `infra/terraform/modules/` with subdirs: `network`, `dynamodb`, `sqs`, `s3`, `ecs-service`, `iam` |
 | T-2.1.3 | Create `infra/terraform/environments/dev`, `staging`, `prod` |
 | T-2.1.4 | Add `main.tf`, `variables.tf`, `outputs.tf` per module |
 | T-2.1.5 | Add `backend.tf` in each environment (S3 + DynamoDB for state) |
@@ -100,14 +102,22 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | T-2.6.9 | Create ECS service for worker (desired count, no ALB) |
 | T-2.6.10 | Output: `cluster_name`, `api_service_name`, `worker_service_name`, `alb_dns_name`, `ecr_api_repo_url`, `ecr_worker_repo_url` |
 
-### 2.7 Environment configs
+### 2.8 S3 module
 
 | Task | Description |
 |------|--------------|
-| T-2.7.1 | `dev/main.tf`: Call all modules with dev-specific vars (small instance sizes, single NAT) |
-| T-2.7.2 | `staging/main.tf`: Call modules with staging vars |
-| T-2.7.3 | `prod/main.tf`: Call modules with prod vars (multi-AZ, larger instances) |
-| T-2.7.4 | Create `dev.tfvars`, `staging.tfvars`, `prod.tfvars` for environment-specific values |
+| T-2.8.1 | Create prompts bucket (versioning, encryption) |
+| T-2.8.2 | Create results bucket (versioning, encryption) |
+| T-2.8.3 | Output: `prompts_bucket_name`, `prompts_bucket_arn`, `results_bucket_name`, `results_bucket_arn` |
+
+### 2.9 Environment configs
+
+| Task | Description |
+|------|--------------|
+| T-2.9.1 | `dev/main.tf`: Call all modules with dev-specific vars (small instance sizes, single NAT) |
+| T-2.9.2 | `staging/main.tf`: Call modules with staging vars |
+| T-2.9.3 | `prod/main.tf`: Call modules with prod vars (multi-AZ, larger instances) |
+| T-2.9.4 | Create `dev.tfvars`, `staging.tfvars`, `prod.tfvars` for environment-specific values |
 
 ---
 
@@ -193,7 +203,8 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | 1.4 | T-5.1.4 | `terraform apply -var-file=dev.tfvars` (network first if split) |
 | 1.5 | T-5.1.5 | Verify: DynamoDB table exists, GSI present, TTL enabled |
 | 1.6 | T-5.1.6 | Verify: SQS queues exist, DLQ configured |
-| 1.7 | T-5.1.7 | Verify: ECR repos exist, ECS cluster created |
+| 1.7 | T-5.1.7 | Verify: S3 buckets exist (prompts, results) |
+| 1.8 | T-5.1.8 | Verify: ECR repos exist, ECS cluster created |
 
 ### Phase 2: Config & secrets
 
@@ -277,13 +288,14 @@ This document describes the target architecture, infrastructure-as-code layout, 
 ## 9. Master Task Checklist
 
 ### IaC
-- [ ] T-2.1.1 – T-2.1.5: Repository structure
+- [x] T-2.1.1 – T-2.1.5: Repository structure
 - [ ] T-2.2.1 – T-2.2.10: Network module
 - [ ] T-2.3.1 – T-2.3.6: DynamoDB module
 - [ ] T-2.4.1 – T-2.4.6: SQS module
+- [ ] T-2.8.1 – T-2.8.3: S3 module
 - [ ] T-2.5.1 – T-2.5.10: IAM module
 - [ ] T-2.6.1 – T-2.6.10: ECS service module
-- [ ] T-2.7.1 – T-2.7.4: Environment configs
+- [ ] T-2.9.1 – T-2.9.4: Environment configs
 
 ### CI
 - [ ] T-3.1.1 – T-3.1.2: Workflow file
@@ -295,7 +307,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 - [ ] T-4.3.1 – T-4.3.15: CD pipeline steps
 
 ### First deploy
-- [ ] T-5.1.1 – T-5.1.7: Phase 1 – Infrastructure
+- [ ] T-5.1.1 – T-5.1.8: Phase 1 – Infrastructure
 - [ ] T-5.2.1 – T-5.2.4: Phase 2 – Config & secrets
 - [ ] T-5.3.1 – T-5.3.6: Phase 3 – Application deploy
 - [ ] T-5.4.1 – T-5.4.5: Phase 4 – Smoke tests

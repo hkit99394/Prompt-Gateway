@@ -1,0 +1,6 @@
+# Dev environment variable values (copy to dev.tfvars and fill in)
+# Usage: terraform plan -var-file=dev.tfvars
+# NEVER commit dev.tfvars - it may contain sensitive values
+
+aws_region  = "us-east-1"
+environment = "dev"
