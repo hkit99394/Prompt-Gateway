@@ -295,7 +295,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 - [x] T-2.5.1 – T-2.5.10: IAM module
 - [x] T-2.6.1 – T-2.6.10: ECS service module
 - [x] T-2.7.1 – T-2.7.3: S3 module
-- [ ] T-2.8.1 – T-2.8.4: Environment configs
+- [x] T-2.8.1 – T-2.8.4: Environment configs
 
 ### CI
 - [ ] T-3.1.1 – T-3.1.2: Workflow file

@@ -1,6 +1,7 @@
 # Dev environment variable values (copy to dev.tfvars and fill in)
 # Usage: terraform plan -var-file=dev.tfvars
 # NEVER commit dev.tfvars - it may contain sensitive values
+# Dev uses HTTP-only (no certificate_arn); staging/prod require certificate_arn
 
 aws_region  = "us-east-1"
 environment = "dev"

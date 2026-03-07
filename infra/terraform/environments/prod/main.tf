@@ -75,9 +75,9 @@ module "ecs_service" {
   results_bucket_name           = module.s3.results_bucket_name
   api_desired_count             = 2
   worker_desired_count          = 2
-  api_cpu                       = 512
-  api_memory                    = 1024
-  worker_cpu                    = 512
-  worker_memory                 = 1024
+  api_cpu                       = 1024
+  api_memory                    = 2048
+  worker_cpu                    = 1024
+  worker_memory                 = 2048
   certificate_arn               = var.certificate_arn
 }
