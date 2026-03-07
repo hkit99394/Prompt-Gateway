@@ -1,17 +1,17 @@
 # DynamoDB module outputs
-# Implementation: T-2.3.x
+# Implementation: T-2.3.6
 
 output "table_name" {
   description = "DynamoDB table name"
-  value       = null
+  value       = aws_dynamodb_table.main.name
 }
 
 output "table_arn" {
   description = "DynamoDB table ARN"
-  value       = null
+  value       = aws_dynamodb_table.main.arn
 }
 
 output "gsi_name" {
-  description = "GSI name"
-  value       = null
+  description = "GSI name for job listing"
+  value       = var.gsi_name
 }

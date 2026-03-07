@@ -23,3 +23,11 @@ module "network" {
   vpc_cidr           = "10.0.0.0/16"
   single_nat_gateway = true
 }
+
+module "dynamodb" {
+  source = "../../modules/dynamodb"
+
+  environment = var.environment
+  table_name  = "prompt-gateway-${var.environment}"
+  gsi_name    = "JobListIndex"
+}
