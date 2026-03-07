@@ -1,11 +1,16 @@
 using ControlPlane.Api;
 using ControlPlane.Api.Auth;
+using ControlPlane.Api.Health;
 using ControlPlane.Aws;
 using ControlPlane.Core;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 builder.Services
     .AddAuthentication(ApiKeyAuthenticationHandler.SchemeName)
     .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
@@ -65,6 +70,9 @@ builder.Services.AddSingleton(outboxOptions);
 builder.Services.AddSingleton<JobOrchestrator>();
 builder.Services.AddSingleton<DispatchOutboxProcessor>();
 builder.Services.AddHostedService<OutboxWorker>();
+builder.Services.AddHealthChecks()
+    .AddCheck("live", () => HealthCheckResult.Healthy(), tags: new[] { "live" })
+    .AddCheck<AwsDependenciesHealthCheck>("aws_dependencies", tags: new[] { "ready" });
 
 if (ApiKeyConfiguration.GetConfiguredApiKeys(builder.Configuration).Count == 0)
 {
@@ -73,9 +81,19 @@ if (ApiKeyConfiguration.GetConfiguredApiKeys(builder.Configuration).Count == 0)
 
 var app = builder.Build();
 
+app.UseSwagger();
+app.UseSwaggerUI();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("live")
+});
+app.MapHealthChecks("/ready", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready")
+});
 
 app.Run();
 

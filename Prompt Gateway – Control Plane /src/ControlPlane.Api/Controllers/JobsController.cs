@@ -54,6 +54,39 @@ public sealed class JobsController : ControllerBase
         }
     }
 
+    [HttpPost("{jobId}/resume")]
+    public async Task<IActionResult> ResumeJob(string jobId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+        {
+            return BadRequest(new { error = "jobId is required" });
+        }
+
+        var existing = await _orchestrator.GetJobAsync(jobId, cancellationToken);
+        if (existing is null)
+        {
+            return NotFound(new { error = $"job '{jobId}' was not found" });
+        }
+
+        try
+        {
+            var dispatch = await _orchestrator.ResumeAsync(jobId, cancellationToken);
+            return Ok(new
+            {
+                dispatch.JobId,
+                dispatch.AttemptId,
+                dispatch.TraceId,
+                dispatch.Provider,
+                dispatch.Model,
+                dispatch.IdempotencyKey
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+    }
+
     [HttpGet]
     public async Task<IActionResult> ListJobs([FromQuery] int? limit, CancellationToken cancellationToken)
     {

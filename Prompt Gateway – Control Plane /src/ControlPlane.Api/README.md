@@ -23,11 +23,17 @@
 - Header: `X-API-Key`
 - Protected endpoints:
   - `POST /jobs`
+  - `POST /jobs/{jobId}/resume`
   - `GET /jobs`
   - `GET /jobs/{jobId}`
   - `GET /jobs/{jobId}/result`
   - `GET /jobs/{jobId}/events`
   - `GET /jobs/{jobId}/detail`
+
+- Operational endpoints (no API key):
+  - `GET /health` (liveness)
+  - `GET /ready` (DynamoDB + SQS readiness)
+  - `GET /swagger` and `GET /swagger/v1/swagger.json`
 
 ## Quick verification
 

@@ -306,6 +306,24 @@ public sealed class JobOrchestrator
         return ResultIngestionOutcome.Finalized(errorResponse);
     }
 
+    public async Task<DispatchMessage> ResumeAsync(string jobId, CancellationToken cancellationToken)
+    {
+        var job = await _jobStore.GetAsync(jobId, cancellationToken);
+        if (job is null)
+        {
+            throw new InvalidOperationException($"Job '{jobId}' was not found.");
+        }
+
+        return job.State switch
+        {
+            JobState.Created => await ResumeFromCreatedAsync(jobId, cancellationToken),
+            JobState.Routed => await DispatchAsync(jobId, job.CurrentAttemptId, cancellationToken),
+            JobState.Retrying => await DispatchAsync(jobId, job.CurrentAttemptId, cancellationToken),
+            _ => throw new InvalidOperationException(
+                $"Job '{jobId}' cannot be resumed from state '{job.State}'.")
+        };
+    }
+
     public Task<JobRecord?> GetJobAsync(string jobId, CancellationToken cancellationToken)
         => _jobStore.GetAsync(jobId, cancellationToken);
 
@@ -317,4 +335,22 @@ public sealed class JobOrchestrator
 
     public Task<IReadOnlyList<JobEvent>> GetEventsAsync(string jobId, CancellationToken cancellationToken)
         => _eventStore.GetAsync(jobId, cancellationToken);
+
+    private async Task<DispatchMessage> ResumeFromCreatedAsync(string jobId, CancellationToken cancellationToken)
+    {
+        var decision = await RouteAsync(jobId, cancellationToken);
+        var routedJob = await _jobStore.GetAsync(jobId, cancellationToken);
+        if (routedJob is null)
+        {
+            throw new InvalidOperationException($"Job '{jobId}' was not found after routing.");
+        }
+
+        var attempt = routedJob.GetAttempt(routedJob.CurrentAttemptId);
+        if (attempt is null || !string.Equals(attempt.Provider, decision.Provider, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Job '{jobId}' route state is inconsistent.");
+        }
+
+        return await DispatchAsync(jobId, routedJob.CurrentAttemptId, cancellationToken);
+    }
 }

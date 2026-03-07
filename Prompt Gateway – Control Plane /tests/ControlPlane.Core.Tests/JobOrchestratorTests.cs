@@ -575,4 +575,107 @@ public class JobOrchestratorTests
         Assert.That(result, Is.EqualTo(summaries));
         await jobStore.Received(1).ListAsync(10, Arg.Any<CancellationToken>());
     }
+
+    [Test]
+    public async Task ResumeAsync_FromCreated_RoutesAndDispatches()
+    {
+        var jobStore = Substitute.For<IJobStore>();
+        var eventStore = Substitute.For<IJobEventStore>();
+        var routingPolicy = Substitute.For<IRoutingPolicy>();
+        var outboxStore = Substitute.For<IOutboxStore>();
+        var dedupeStore = Substitute.For<IDeduplicationStore>();
+        var assembler = Substitute.For<ICanonicalResponseAssembler>();
+        var resultStore = Substitute.For<IResultStore>();
+        var retryPlanner = Substitute.For<IRetryPlanner>();
+        var idGenerator = Substitute.For<IIdGenerator>();
+        var clock = Substitute.For<IClock>();
+        var logger = Substitute.For<ILogger<JobOrchestrator>>();
+
+        var now = new DateTimeOffset(2026, 2, 8, 0, 0, 0, TimeSpan.Zero);
+        clock.UtcNow.Returns(now);
+        idGenerator.NewId("outbox").Returns("outbox-resume");
+
+        var request = new CanonicalJobRequest
+        {
+            JobId = "job-resume-core",
+            AttemptId = "attempt-resume-core",
+            TraceId = "trace-resume-core",
+            TaskType = "chat_completion"
+        };
+        var job = JobRecord.Create(request, now);
+        jobStore.GetAsync("job-resume-core", Arg.Any<CancellationToken>()).Returns(job);
+        routingPolicy.DecideAsync(request, Arg.Any<CancellationToken>()).Returns(new RoutingDecision
+        {
+            Provider = "openai",
+            Model = "gpt-4.1",
+            PolicyVersion = "v1"
+        });
+
+        var orchestrator = new JobOrchestrator(
+            logger,
+            jobStore,
+            eventStore,
+            routingPolicy,
+            outboxStore,
+            dedupeStore,
+            assembler,
+            resultStore,
+            retryPlanner,
+            idGenerator,
+            clock);
+
+        var dispatch = await orchestrator.ResumeAsync("job-resume-core", CancellationToken.None);
+
+        Assert.That(dispatch.JobId, Is.EqualTo("job-resume-core"));
+        await eventStore.Received(1).AppendAsync(
+            Arg.Is<JobEvent>(evt => evt.Type == JobEventType.Routed),
+            Arg.Any<CancellationToken>());
+        await eventStore.Received(1).AppendAsync(
+            Arg.Is<JobEvent>(evt => evt.Type == JobEventType.Dispatched),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public void ResumeAsync_FromCompleted_ThrowsInvalidOperation()
+    {
+        var jobStore = Substitute.For<IJobStore>();
+        var eventStore = Substitute.For<IJobEventStore>();
+        var routingPolicy = Substitute.For<IRoutingPolicy>();
+        var outboxStore = Substitute.For<IOutboxStore>();
+        var dedupeStore = Substitute.For<IDeduplicationStore>();
+        var assembler = Substitute.For<ICanonicalResponseAssembler>();
+        var resultStore = Substitute.For<IResultStore>();
+        var retryPlanner = Substitute.For<IRetryPlanner>();
+        var idGenerator = Substitute.For<IIdGenerator>();
+        var clock = Substitute.For<IClock>();
+        var logger = Substitute.For<ILogger<JobOrchestrator>>();
+
+        var now = new DateTimeOffset(2026, 2, 8, 0, 0, 0, TimeSpan.Zero);
+        var request = new CanonicalJobRequest
+        {
+            JobId = "job-resume-terminal",
+            AttemptId = "attempt-resume-terminal",
+            TraceId = "trace-resume-terminal",
+            TaskType = "chat_completion"
+        };
+        var job = JobRecord.Create(request, now);
+        job.SetState(JobState.Completed, now.AddMinutes(1));
+        jobStore.GetAsync("job-resume-terminal", Arg.Any<CancellationToken>()).Returns(job);
+
+        var orchestrator = new JobOrchestrator(
+            logger,
+            jobStore,
+            eventStore,
+            routingPolicy,
+            outboxStore,
+            dedupeStore,
+            assembler,
+            resultStore,
+            retryPlanner,
+            idGenerator,
+            clock);
+
+        Assert.ThrowsAsync<InvalidOperationException>(() =>
+            orchestrator.ResumeAsync("job-resume-terminal", CancellationToken.None));
+    }
 }

@@ -9,4 +9,8 @@
     <ProjectReference Include="..\ControlPlane.Core\ControlPlane.Core.csproj" />
     <ProjectReference Include="..\ControlPlane.Aws\ControlPlane.Aws.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.4" />
+  </ItemGroup>
 </Project>
