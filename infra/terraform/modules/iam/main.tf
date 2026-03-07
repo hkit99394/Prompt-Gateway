@@ -47,6 +47,23 @@ resource "aws_iam_role_policy_attachment" "ecs_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Execution role needs Secrets Manager access for container secrets (valueFrom)
+resource "aws_iam_role_policy" "ecs_execution_secrets" {
+  name = "secrets"
+  role = aws_iam_role.ecs_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = concat(local.control_plane_secrets_arns, local.provider_worker_secrets_arns)
+      }
+    ]
+  })
+}
+
 # T-2.5.3: IAM role for Control Plane API task
 resource "aws_iam_role" "control_plane" {
   name = "prompt-gateway-${var.environment}-control-plane-api"
@@ -264,7 +281,7 @@ resource "aws_iam_role_policy" "provider_worker_secrets" {
       {
         Effect   = "Allow"
         Action   = "secretsmanager:GetSecretValue"
-        Resource = local.secrets_arns
+        Resource = local.provider_worker_secrets_arns
       }
     ]
   })

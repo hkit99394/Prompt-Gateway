@@ -298,8 +298,8 @@ This document describes the target architecture, infrastructure-as-code layout, 
 - [x] T-2.8.1 – T-2.8.4: Environment configs
 
 ### CI
-- [ ] T-3.1.1 – T-3.1.2: Workflow file
-- [ ] T-3.2.1 – T-3.2.11: CI steps
+- [x] T-3.1.1 – T-3.1.2: Workflow file
+- [x] T-3.2.1 – T-3.2.11: CI steps
 
 ### CD
 - [ ] T-4.1.1 – T-4.1.3: CD dev
