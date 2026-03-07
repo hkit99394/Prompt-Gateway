@@ -5,7 +5,7 @@ using Amazon.DynamoDBv2.Model;
 
 namespace ControlPlane.Aws;
 
-internal abstract class DynamoDbStoreBase
+public abstract class DynamoDbStoreBase
 {
     protected readonly IAmazonDynamoDB DynamoDb;
     protected readonly DynamoDbOptions Options;

@@ -53,84 +53,93 @@ public sealed class DynamoDbOutboxStore : DynamoDbStoreBase, IOutboxStore
     {
         EnsureConfigured();
         var cutoff = FormatTimestamp(DateTimeOffset.UtcNow.Subtract(ProcessingLease));
-        var request = new QueryRequest
-        {
-            TableName = Options.TableName,
-            KeyConditionExpression = "#pk = :pk",
-            FilterExpression = "(#status = :pending) OR (#status = :processing AND (#startedAt < :cutoff OR attribute_not_exists(#startedAt)))",
-            ExpressionAttributeNames = new Dictionary<string, string>
-            {
-                ["#pk"] = PartitionKey,
-                ["#status"] = StatusField,
-                ["#startedAt"] = ProcessingStartedAtField
-            },
-            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
-            {
-                [":pk"] = Attr(OutboxPartition),
-                [":pending"] = Attr("pending"),
-                [":processing"] = Attr("processing"),
-                [":cutoff"] = Attr(cutoff)
-            },
-            Limit = 1,
-            ScanIndexForward = true
-        };
+        Dictionary<string, AttributeValue>? startKey = null;
 
-        var response = await DynamoDb.QueryAsync(request, cancellationToken);
-        var item = response.Items.FirstOrDefault();
-        if (item is null)
+        while (true)
         {
-            return null;
-        }
-
-        var outboxId = GetString(item, SortKey);
-        if (string.IsNullOrWhiteSpace(outboxId))
-        {
-            return null;
-        }
-
-        var now = FormatTimestamp(DateTimeOffset.UtcNow);
-        try
-        {
-            await DynamoDb.UpdateItemAsync(new UpdateItemRequest
+            var request = new QueryRequest
             {
                 TableName = Options.TableName,
-                Key = new Dictionary<string, AttributeValue>
-                {
-                    [PartitionKey] = Attr(OutboxPartition),
-                    [SortKey] = Attr(outboxId)
-                },
-                UpdateExpression = "SET #status = :processing, #startedAt = :now, #owner = :owner REMOVE #error",
-                ConditionExpression = "#status = :pending OR (#status = :processing AND (#startedAt < :cutoff OR attribute_not_exists(#startedAt)))",
+                KeyConditionExpression = "#pk = :pk",
+                FilterExpression = "(#status = :pending) OR (#status = :processing AND (#startedAt < :cutoff OR attribute_not_exists(#startedAt)))",
                 ExpressionAttributeNames = new Dictionary<string, string>
                 {
+                    ["#pk"] = PartitionKey,
                     ["#status"] = StatusField,
-                    ["#startedAt"] = ProcessingStartedAtField,
-                    ["#owner"] = ProcessingOwnerField,
-                    ["#error"] = ErrorField
+                    ["#startedAt"] = ProcessingStartedAtField
                 },
                 ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
+                    [":pk"] = Attr(OutboxPartition),
                     [":pending"] = Attr("pending"),
                     [":processing"] = Attr("processing"),
-                    [":cutoff"] = Attr(cutoff),
-                    [":now"] = Attr(now),
-                    [":owner"] = Attr(_processingOwner)
+                    [":cutoff"] = Attr(cutoff)
+                },
+                Limit = 25,
+                ScanIndexForward = true,
+                ExclusiveStartKey = startKey
+            };
+
+            var response = await DynamoDb.QueryAsync(request, cancellationToken);
+            foreach (var item in response.Items)
+            {
+                var outboxId = GetString(item, SortKey);
+                if (string.IsNullOrWhiteSpace(outboxId))
+                {
+                    continue;
                 }
-            }, cancellationToken);
-        }
-        catch (ConditionalCheckFailedException)
-        {
-            return null;
-        }
 
-        var payload = GetString(item, MessageField);
-        if (string.IsNullOrWhiteSpace(payload))
-        {
-            await MarkFailedAsync(outboxId, "missing_payload", cancellationToken);
-            return null;
-        }
+                var now = FormatTimestamp(DateTimeOffset.UtcNow);
+                try
+                {
+                    await DynamoDb.UpdateItemAsync(new UpdateItemRequest
+                    {
+                        TableName = Options.TableName,
+                        Key = new Dictionary<string, AttributeValue>
+                        {
+                            [PartitionKey] = Attr(OutboxPartition),
+                            [SortKey] = Attr(outboxId)
+                        },
+                        UpdateExpression = "SET #status = :processing, #startedAt = :now, #owner = :owner REMOVE #error",
+                        ConditionExpression = "#status = :pending OR (#status = :processing AND (#startedAt < :cutoff OR attribute_not_exists(#startedAt)))",
+                        ExpressionAttributeNames = new Dictionary<string, string>
+                        {
+                            ["#status"] = StatusField,
+                            ["#startedAt"] = ProcessingStartedAtField,
+                            ["#owner"] = ProcessingOwnerField,
+                            ["#error"] = ErrorField
+                        },
+                        ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                        {
+                            [":pending"] = Attr("pending"),
+                            [":processing"] = Attr("processing"),
+                            [":cutoff"] = Attr(cutoff),
+                            [":now"] = Attr(now),
+                            [":owner"] = Attr(_processingOwner)
+                        }
+                    }, cancellationToken);
+                }
+                catch (ConditionalCheckFailedException)
+                {
+                    continue;
+                }
 
-        return JsonSerializer.Deserialize<OutboxDispatchMessage>(payload, SerializerOptions);
+                var payload = GetString(item, MessageField);
+                if (string.IsNullOrWhiteSpace(payload))
+                {
+                    await MarkFailedAsync(outboxId, "missing_payload", cancellationToken);
+                    continue;
+                }
+
+                return JsonSerializer.Deserialize<OutboxDispatchMessage>(payload, SerializerOptions);
+            }
+
+            startKey = response.LastEvaluatedKey;
+            if (startKey is null || startKey.Count == 0)
+            {
+                return null;
+            }
+        }
     }
 
     public async Task MarkDispatchedAsync(string outboxId, CancellationToken cancellationToken)

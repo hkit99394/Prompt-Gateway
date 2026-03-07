@@ -1,9 +1,11 @@
 using ControlPlane.Core;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ControlPlane.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("jobs")]
 public sealed class JobsController : ControllerBase
 {
@@ -17,18 +19,39 @@ public sealed class JobsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateJob([FromBody] CanonicalJobRequest request, CancellationToken cancellationToken)
     {
-        var handle = await _orchestrator.AcceptAsync(request, cancellationToken);
-        var routing = await _orchestrator.RouteAsync(handle.JobId, cancellationToken);
-        var dispatch = await _orchestrator.DispatchAsync(handle.JobId, handle.AttemptId, cancellationToken);
-
-        return Ok(new
+        if (request is null)
         {
-            handle.JobId,
-            handle.AttemptId,
-            handle.TraceId,
-            routing,
-            dispatch.IdempotencyKey
-        });
+            return BadRequest(new { error = "request body is required" });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.TaskType))
+        {
+            return BadRequest(new { error = "taskType is required" });
+        }
+
+        try
+        {
+            var handle = await _orchestrator.AcceptAsync(request, cancellationToken);
+            var routing = await _orchestrator.RouteAsync(handle.JobId, cancellationToken);
+            var dispatch = await _orchestrator.DispatchAsync(handle.JobId, handle.AttemptId, cancellationToken);
+
+            return Ok(new
+            {
+                handle.JobId,
+                handle.AttemptId,
+                handle.TraceId,
+                routing,
+                dispatch.IdempotencyKey
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
     }
 
     [HttpGet]

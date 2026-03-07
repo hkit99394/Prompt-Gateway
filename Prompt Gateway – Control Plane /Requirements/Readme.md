@@ -90,3 +90,14 @@ CP-10 Observability
 	•	Emit metrics:
 	•	latency, success rate, retries, cost.
 	•	Propagate trace context.
+
+⸻
+
+Operational notes (API security + contract)
+	•	Required secret: ApiSecurity:ApiKey
+	•	Recommended source: environment variable ApiSecurity__ApiKey (or external secret store), not appsettings.json.
+	•	Required request header for protected endpoints: X-API-Key
+	•	Expected API responses:
+	•	401 Unauthorized: missing or invalid X-API-Key
+	•	400 Bad Request: invalid input payload (for example missing taskType)
+	•	409 Conflict: request rejected due to current orchestration state conflict

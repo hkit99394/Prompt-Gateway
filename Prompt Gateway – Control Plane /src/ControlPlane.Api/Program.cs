@@ -1,10 +1,17 @@
 using ControlPlane.Api;
+using ControlPlane.Api.Auth;
 using ControlPlane.Aws;
 using ControlPlane.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services
+    .AddAuthentication(ApiKeyAuthenticationHandler.SchemeName)
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
+        ApiKeyAuthenticationHandler.SchemeName,
+        _ => { });
+builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IClock, SystemClock>();
 builder.Services.AddSingleton<IIdGenerator, GuidIdGenerator>();
 builder.Services.AddSingleton<ICanonicalResponseAssembler, SimpleResponseAssembler>();
@@ -58,8 +65,19 @@ builder.Services.AddSingleton<JobOrchestrator>();
 builder.Services.AddSingleton<DispatchOutboxProcessor>();
 builder.Services.AddHostedService<OutboxWorker>();
 
+if (string.IsNullOrWhiteSpace(builder.Configuration["ApiSecurity:ApiKey"]))
+{
+    throw new InvalidOperationException("ApiSecurity:ApiKey must be configured.");
+}
+
 var app = builder.Build();
 
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+public partial class Program
+{
+}
