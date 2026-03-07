@@ -164,7 +164,7 @@ public class DynamoDbJobStoreTests
         var outbox = new OutboxDispatchMessage("outbox-transaction", dispatch, now);
         var jobEvent = JobEvent.Dispatched("job-transaction", "attempt-transaction", now, dispatch);
 
-        await store.UpdateAndEnqueueDispatchAsync(job, previous, outbox, jobEvent, CancellationToken.None);
+        await store.UpdateAndEnqueueDispatchAsync(job, previous, outbox, jobEvent, dedupeAttemptId: null, CancellationToken.None);
 
         Assert.That(capturedRequest, Is.Not.Null);
         Assert.That(capturedRequest!.TransactItems, Has.Count.EqualTo(3));
@@ -308,7 +308,7 @@ public class DynamoDbJobStoreTests
             outbox.Message);
 
         Assert.ThrowsAsync<OptimisticConcurrencyException>(() =>
-            store.UpdateAndEnqueueDispatchAsync(job, previous, outbox, jobEvent, CancellationToken.None));
+            store.UpdateAndEnqueueDispatchAsync(job, previous, outbox, jobEvent, dedupeAttemptId: null, CancellationToken.None));
     }
 
     private static string SerializeSnapshot(JobRecordSnapshot snapshot)

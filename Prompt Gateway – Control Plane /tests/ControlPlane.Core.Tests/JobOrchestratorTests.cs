@@ -260,6 +260,7 @@ public class JobOrchestratorTests
             Arg.Any<DateTimeOffset>(),
             Arg.Is<OutboxDispatchMessage>(message => message.OutboxId == "outbox-transactional"),
             Arg.Is<JobEvent>(evt => evt.Type == JobEventType.Dispatched),
+            Arg.Is<string?>(value => value == null),
             Arg.Any<CancellationToken>());
         await outboxStore.DidNotReceive().EnqueueDispatchAsync(Arg.Any<OutboxDispatchMessage>(), Arg.Any<CancellationToken>());
         await eventStore.DidNotReceive().AppendAsync(Arg.Any<JobEvent>(), Arg.Any<CancellationToken>());
@@ -529,9 +530,75 @@ public class JobOrchestratorTests
             Arg.Any<DateTimeOffset>(),
             Arg.Is<OutboxDispatchMessage>(message => message.OutboxId == "outbox-transactional-retry"),
             Arg.Is<JobEvent>(evt => evt.Type == JobEventType.Retried),
+            Arg.Is<string?>(value => value == "attempt-transactional-retry"),
             Arg.Any<CancellationToken>());
         await outboxStore.DidNotReceive().EnqueueDispatchAsync(Arg.Any<OutboxDispatchMessage>(), Arg.Any<CancellationToken>());
         await eventStore.DidNotReceive().AppendAsync(Arg.Any<JobEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task IngestResultAsync_FinalizesOnSuccess_UsesTransactionalJobStore_WhenAvailable()
+    {
+        var transactionalJobStore = Substitute.For<ITransactionalJobStore>();
+        var eventStore = Substitute.For<IJobEventStore>();
+        var routingPolicy = Substitute.For<IRoutingPolicy>();
+        var outboxStore = Substitute.For<IOutboxStore>();
+        var dedupeStore = Substitute.For<IDeduplicationStore>();
+        var assembler = Substitute.For<ICanonicalResponseAssembler>();
+        var resultStore = Substitute.For<IResultStore>();
+        var retryPlanner = Substitute.For<IRetryPlanner>();
+        var idGenerator = Substitute.For<IIdGenerator>();
+        var clock = Substitute.For<IClock>();
+        var logger = Substitute.For<ILogger<JobOrchestrator>>();
+
+        var now = new DateTimeOffset(2026, 2, 8, 0, 0, 0, TimeSpan.Zero);
+        clock.UtcNow.Returns(now);
+        dedupeStore.TryStartAsync("job-transactional-success", "attempt-transactional-success", Arg.Any<CancellationToken>())
+            .Returns(true);
+        var request = new CanonicalJobRequest
+        {
+            JobId = "job-transactional-success",
+            AttemptId = "attempt-transactional-success",
+            TraceId = "trace-transactional-success",
+            TaskType = "chat_completion"
+        };
+        var job = JobRecord.Create(request, now);
+        transactionalJobStore.GetAsync("job-transactional-success", Arg.Any<CancellationToken>()).Returns(job);
+        var response = new CanonicalResponse { Provider = "openai", Model = "gpt-4.1" };
+        assembler.AssembleAsync(Arg.Any<ProviderResultEvent>(), Arg.Any<CancellationToken>()).Returns(response);
+
+        var orchestrator = new JobOrchestrator(
+            logger,
+            transactionalJobStore,
+            eventStore,
+            routingPolicy,
+            outboxStore,
+            dedupeStore,
+            assembler,
+            resultStore,
+            retryPlanner,
+            idGenerator,
+            clock);
+
+        var outcome = await orchestrator.IngestResultAsync(new ProviderResultEvent
+        {
+            JobId = "job-transactional-success",
+            AttemptId = "attempt-transactional-success",
+            Provider = "openai",
+            Model = "gpt-4.1",
+            IsSuccess = true
+        }, CancellationToken.None);
+
+        Assert.That(outcome.Status, Is.EqualTo(ResultIngestionStatus.Finalized));
+        await transactionalJobStore.Received(1).FinalizeResultIngestionAsync(
+            Arg.Is<JobRecord>(record => record.State == JobState.Completed),
+            Arg.Any<DateTimeOffset>(),
+            "attempt-transactional-success",
+            response,
+            Arg.Is<JobEvent>(evt => evt.Type == JobEventType.Completed),
+            Arg.Any<CancellationToken>());
+        await resultStore.DidNotReceive().SaveFinalResultAsync(Arg.Any<string>(), Arg.Any<CanonicalResponse>(), Arg.Any<CancellationToken>());
+        await dedupeStore.DidNotReceive().MarkCompletedAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Test]

@@ -16,6 +16,15 @@ public interface ITransactionalJobStore : IJobStore
         DateTimeOffset expectedUpdatedAt,
         OutboxDispatchMessage message,
         JobEvent jobEvent,
+        string? dedupeAttemptId,
+        CancellationToken cancellationToken);
+
+    Task FinalizeResultIngestionAsync(
+        JobRecord job,
+        DateTimeOffset expectedUpdatedAt,
+        string dedupeAttemptId,
+        CanonicalResponse response,
+        JobEvent? jobEvent,
         CancellationToken cancellationToken);
 }
 

@@ -20,6 +20,10 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore, ITransactio
     private const string OutboxCreatedAtField = "created_at";
     private const string EventField = "event_json";
     private const string EventPrefix = "EVENT#";
+    private const string ResponseField = "response_json";
+    private const string DedupePartitionPrefix = "DEDUP#";
+    private const string DedupeSortPrefix = "ATTEMPT#";
+    private const string DedupeStatusField = "status";
     private const string JobPartitionPrefix = "JOB#";
     private const string JobSortKey = "JOB";
 
@@ -227,6 +231,7 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore, ITransactio
         DateTimeOffset expectedUpdatedAt,
         OutboxDispatchMessage message,
         JobEvent jobEvent,
+        string? dedupeAttemptId,
         CancellationToken cancellationToken)
     {
         EnsureConfigured();
@@ -238,75 +243,82 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore, ITransactio
         var serializedOutbox = JsonSerializer.Serialize(message, SerializerOptions);
         var eventSortKey = $"{EventPrefix}{FormatTimestamp(jobEvent.OccurredAt)}#{jobEvent.AttemptId}#{jobEvent.Type}";
         var serializedEvent = JsonSerializer.Serialize(jobEvent, SerializerOptions);
-        var request = new TransactWriteItemsRequest
+        var transactItems = new List<TransactWriteItem>
         {
-            TransactItems = new List<TransactWriteItem>
+            new()
             {
-                new()
+                Update = new Update
                 {
-                    Update = new Update
+                    TableName = Options.TableName,
+                    Key = new Dictionary<string, AttributeValue>
                     {
-                        TableName = Options.TableName,
-                        Key = new Dictionary<string, AttributeValue>
-                        {
-                            [PartitionKey] = Attr($"{JobPartitionPrefix}{job.JobId}"),
-                            [SortKey] = Attr(JobSortKey)
-                        },
-                        UpdateExpression = "SET #snapshot = :snapshot, #updatedAt = :updatedAt, #jobListPk = :jobListPk, #jobListSk = :jobListSk",
-                        ConditionExpression = "(#updatedAt = :expectedUpdatedAt) OR attribute_not_exists(#updatedAt)",
-                        ExpressionAttributeNames = new Dictionary<string, string>
-                        {
-                            ["#snapshot"] = SnapshotField,
-                            ["#updatedAt"] = UpdatedAtField,
-                            ["#jobListPk"] = JobListPartitionKeyField,
-                            ["#jobListSk"] = JobListSortKeyField
-                        },
-                        ExpressionAttributeValues = new Dictionary<string, AttributeValue>
-                        {
-                            [":snapshot"] = Attr(serializedSnapshot),
-                            [":updatedAt"] = Attr(updatedAt),
-                            [":expectedUpdatedAt"] = Attr(expected),
-                            [":jobListPk"] = Attr(JobListPartition),
-                            [":jobListSk"] = Attr(updatedAt)
-                        }
+                        [PartitionKey] = Attr($"{JobPartitionPrefix}{job.JobId}"),
+                        [SortKey] = Attr(JobSortKey)
+                    },
+                    UpdateExpression = "SET #snapshot = :snapshot, #updatedAt = :updatedAt, #jobListPk = :jobListPk, #jobListSk = :jobListSk",
+                    ConditionExpression = "(#updatedAt = :expectedUpdatedAt) OR attribute_not_exists(#updatedAt)",
+                    ExpressionAttributeNames = new Dictionary<string, string>
+                    {
+                        ["#snapshot"] = SnapshotField,
+                        ["#updatedAt"] = UpdatedAtField,
+                        ["#jobListPk"] = JobListPartitionKeyField,
+                        ["#jobListSk"] = JobListSortKeyField
+                    },
+                    ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                    {
+                        [":snapshot"] = Attr(serializedSnapshot),
+                        [":updatedAt"] = Attr(updatedAt),
+                        [":expectedUpdatedAt"] = Attr(expected),
+                        [":jobListPk"] = Attr(JobListPartition),
+                        [":jobListSk"] = Attr(updatedAt)
                     }
-                },
-                new()
+                }
+            },
+            new()
+            {
+                Put = new Put
                 {
-                    Put = new Put
+                    TableName = Options.TableName,
+                    Item = new Dictionary<string, AttributeValue>
                     {
-                        TableName = Options.TableName,
-                        Item = new Dictionary<string, AttributeValue>
-                        {
-                            [PartitionKey] = Attr(OutboxPartition),
-                            [SortKey] = Attr(message.OutboxId),
-                            [OutboxStatusField] = Attr("pending"),
-                            [OutboxCreatedAtField] = Attr(outboxCreatedAt),
-                            [OutboxMessageField] = Attr(serializedOutbox)
-                        },
-                        ConditionExpression = "attribute_not_exists(#pk) AND attribute_not_exists(#sk)",
-                        ExpressionAttributeNames = new Dictionary<string, string>
-                        {
-                            ["#pk"] = PartitionKey,
-                            ["#sk"] = SortKey
-                        }
+                        [PartitionKey] = Attr(OutboxPartition),
+                        [SortKey] = Attr(message.OutboxId),
+                        [OutboxStatusField] = Attr("pending"),
+                        [OutboxCreatedAtField] = Attr(outboxCreatedAt),
+                        [OutboxMessageField] = Attr(serializedOutbox)
+                    },
+                    ConditionExpression = "attribute_not_exists(#pk) AND attribute_not_exists(#sk)",
+                    ExpressionAttributeNames = new Dictionary<string, string>
+                    {
+                        ["#pk"] = PartitionKey,
+                        ["#sk"] = SortKey
                     }
-                },
-                new()
+                }
+            },
+            new()
+            {
+                Put = new Put
                 {
-                    Put = new Put
+                    TableName = Options.TableName,
+                    Item = new Dictionary<string, AttributeValue>
                     {
-                        TableName = Options.TableName,
-                        Item = new Dictionary<string, AttributeValue>
-                        {
-                            [PartitionKey] = Attr($"{JobPartitionPrefix}{jobEvent.JobId}"),
-                            [SortKey] = Attr(eventSortKey),
-                            [EventField] = Attr(serializedEvent)
-                        }
+                        [PartitionKey] = Attr($"{JobPartitionPrefix}{jobEvent.JobId}"),
+                        [SortKey] = Attr(eventSortKey),
+                        [EventField] = Attr(serializedEvent)
                     }
                 }
             }
         };
+
+        if (!string.IsNullOrWhiteSpace(dedupeAttemptId))
+        {
+            transactItems.Add(new TransactWriteItem
+            {
+                Update = BuildDedupeCompletedUpdate(job.JobId, dedupeAttemptId!)
+            });
+        }
+
+        var request = new TransactWriteItemsRequest { TransactItems = transactItems };
 
         try
         {
@@ -327,6 +339,147 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore, ITransactio
 
             throw;
         }
+    }
+
+    public async Task FinalizeResultIngestionAsync(
+        JobRecord job,
+        DateTimeOffset expectedUpdatedAt,
+        string dedupeAttemptId,
+        CanonicalResponse response,
+        JobEvent? jobEvent,
+        CancellationToken cancellationToken)
+    {
+        EnsureConfigured();
+        var snapshot = ToSnapshot(job);
+        var updatedAt = FormatTimestamp(job.UpdatedAt);
+        var expected = FormatTimestamp(expectedUpdatedAt);
+        var serializedSnapshot = JsonSerializer.Serialize(snapshot, SerializerOptions);
+        var serializedResponse = JsonSerializer.Serialize(response, SerializerOptions);
+
+        var transactItems = new List<TransactWriteItem>
+        {
+            new()
+            {
+                Update = new Update
+                {
+                    TableName = Options.TableName,
+                    Key = new Dictionary<string, AttributeValue>
+                    {
+                        [PartitionKey] = Attr($"{JobPartitionPrefix}{job.JobId}"),
+                        [SortKey] = Attr(JobSortKey)
+                    },
+                    UpdateExpression = "SET #snapshot = :snapshot, #updatedAt = :updatedAt, #jobListPk = :jobListPk, #jobListSk = :jobListSk",
+                    ConditionExpression = "(#updatedAt = :expectedUpdatedAt) OR attribute_not_exists(#updatedAt)",
+                    ExpressionAttributeNames = new Dictionary<string, string>
+                    {
+                        ["#snapshot"] = SnapshotField,
+                        ["#updatedAt"] = UpdatedAtField,
+                        ["#jobListPk"] = JobListPartitionKeyField,
+                        ["#jobListSk"] = JobListSortKeyField
+                    },
+                    ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                    {
+                        [":snapshot"] = Attr(serializedSnapshot),
+                        [":updatedAt"] = Attr(updatedAt),
+                        [":expectedUpdatedAt"] = Attr(expected),
+                        [":jobListPk"] = Attr(JobListPartition),
+                        [":jobListSk"] = Attr(updatedAt)
+                    }
+                }
+            },
+            new()
+            {
+                Put = new Put
+                {
+                    TableName = Options.TableName,
+                    Item = new Dictionary<string, AttributeValue>
+                    {
+                        [PartitionKey] = Attr($"{JobPartitionPrefix}{job.JobId}"),
+                        [SortKey] = Attr($"RESULT#ATTEMPT#{dedupeAttemptId}"),
+                        [ResponseField] = Attr(serializedResponse)
+                    }
+                }
+            },
+            new()
+            {
+                Put = new Put
+                {
+                    TableName = Options.TableName,
+                    Item = new Dictionary<string, AttributeValue>
+                    {
+                        [PartitionKey] = Attr($"{JobPartitionPrefix}{job.JobId}"),
+                        [SortKey] = Attr("RESULT#FINAL"),
+                        [ResponseField] = Attr(serializedResponse)
+                    }
+                }
+            },
+            new()
+            {
+                Update = BuildDedupeCompletedUpdate(job.JobId, dedupeAttemptId)
+            }
+        };
+
+        if (jobEvent is not null)
+        {
+            var eventSortKey = $"{EventPrefix}{FormatTimestamp(jobEvent.OccurredAt)}#{jobEvent.AttemptId}#{jobEvent.Type}";
+            transactItems.Add(new TransactWriteItem
+            {
+                Put = new Put
+                {
+                    TableName = Options.TableName,
+                    Item = new Dictionary<string, AttributeValue>
+                    {
+                        [PartitionKey] = Attr($"{JobPartitionPrefix}{jobEvent.JobId}"),
+                        [SortKey] = Attr(eventSortKey),
+                        [EventField] = Attr(JsonSerializer.Serialize(jobEvent, SerializerOptions))
+                    }
+                }
+            });
+        }
+
+        var request = new TransactWriteItemsRequest { TransactItems = transactItems };
+
+        try
+        {
+            await DynamoDb.TransactWriteItemsAsync(request, cancellationToken);
+        }
+        catch (TransactionCanceledException ex)
+        {
+            var jobUpdateConflict = ex.CancellationReasons is { Count: > 0 }
+                ? string.Equals(ex.CancellationReasons[0]?.Code, "ConditionalCheckFailed", StringComparison.Ordinal)
+                : ex.Message.Contains("ConditionalCheckFailed", StringComparison.Ordinal);
+
+            if (jobUpdateConflict)
+            {
+                throw new OptimisticConcurrencyException(
+                    $"Job '{job.JobId}' update conflict detected. Reload and retry.",
+                    ex);
+            }
+
+            throw;
+        }
+    }
+
+    private Update BuildDedupeCompletedUpdate(string jobId, string dedupeAttemptId)
+    {
+        return new Update
+        {
+            TableName = Options.TableName,
+            Key = new Dictionary<string, AttributeValue>
+            {
+                [PartitionKey] = Attr($"{DedupePartitionPrefix}{jobId}"),
+                [SortKey] = Attr($"{DedupeSortPrefix}{dedupeAttemptId}")
+            },
+            UpdateExpression = "SET #status = :completed",
+            ExpressionAttributeNames = new Dictionary<string, string>
+            {
+                ["#status"] = DedupeStatusField
+            },
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":completed"] = Attr("completed")
+            }
+        };
     }
 
     private static JobRecordSnapshot ToSnapshot(JobRecord job)

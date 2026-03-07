@@ -162,6 +162,7 @@ public sealed class JobOrchestrator
                 expectedUpdatedAt,
                 outbox,
                 dispatchedEvent,
+                dedupeAttemptId: null,
                 cancellationToken);
         }
         else
@@ -230,11 +231,25 @@ public sealed class JobOrchestrator
             attempt.SetState(AttemptState.Completed, now);
             job.SetState(JobState.Completed, now);
 
-            await _resultStore.SaveAttemptResultAsync(job.JobId, attempt.AttemptId, response, cancellationToken);
-            await _resultStore.SaveFinalResultAsync(job.JobId, response, cancellationToken);
-            await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
-            await _eventStore.AppendAsync(JobEvent.Completed(job.JobId, attempt.AttemptId, now, response), cancellationToken);
-            await _dedupeStore.MarkCompletedAsync(job.JobId, attempt.AttemptId, cancellationToken);
+            var completedEvent = JobEvent.Completed(job.JobId, attempt.AttemptId, now, response);
+            if (_jobStore is ITransactionalJobStore transactionalJobStore)
+            {
+                await transactionalJobStore.FinalizeResultIngestionAsync(
+                    job,
+                    expectedUpdatedAt,
+                    attempt.AttemptId,
+                    response,
+                    completedEvent,
+                    cancellationToken);
+            }
+            else
+            {
+                await _resultStore.SaveAttemptResultAsync(job.JobId, attempt.AttemptId, response, cancellationToken);
+                await _resultStore.SaveFinalResultAsync(job.JobId, response, cancellationToken);
+                await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
+                await _eventStore.AppendAsync(completedEvent, cancellationToken);
+                await _dedupeStore.MarkCompletedAsync(job.JobId, attempt.AttemptId, cancellationToken);
+            }
 
             _logger.LogInformation("Result finalized for job.");
             return ResultIngestionOutcome.Finalized(response);
@@ -274,6 +289,7 @@ public sealed class JobOrchestrator
                     expectedUpdatedAt,
                     outbox,
                     retriedEvent,
+                    dedupeAttemptId: attempt.AttemptId,
                     cancellationToken);
             }
             else
@@ -281,8 +297,8 @@ public sealed class JobOrchestrator
                 await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
                 await _outboxStore.EnqueueDispatchAsync(outbox, cancellationToken);
                 await _eventStore.AppendAsync(retriedEvent, cancellationToken);
+                await _dedupeStore.MarkCompletedAsync(job.JobId, attempt.AttemptId, cancellationToken);
             }
-            await _dedupeStore.MarkCompletedAsync(job.JobId, attempt.AttemptId, cancellationToken);
 
             _logger.LogWarning("Result failed; retrying with provider {Provider}.", retryPlan.Provider);
             return ResultIngestionOutcome.Retrying(dispatch);
@@ -292,16 +308,31 @@ public sealed class JobOrchestrator
         attempt.SetState(AttemptState.Failed, now);
         job.SetState(JobState.Failed, now);
 
-        await _resultStore.SaveAttemptResultAsync(job.JobId, attempt.AttemptId, errorResponse, cancellationToken);
-        await _resultStore.SaveFinalResultAsync(job.JobId, errorResponse, cancellationToken);
-        await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
-
-        if (errorResponse.Error is not null)
+        var failedEvent = errorResponse.Error is null
+            ? null
+            : JobEvent.Failed(job.JobId, attempt.AttemptId, now, errorResponse.Error);
+        if (_jobStore is ITransactionalJobStore transactionalStoreForFailure)
         {
-            await _eventStore.AppendAsync(JobEvent.Failed(job.JobId, attempt.AttemptId, now, errorResponse.Error), cancellationToken);
+            await transactionalStoreForFailure.FinalizeResultIngestionAsync(
+                job,
+                expectedUpdatedAt,
+                attempt.AttemptId,
+                errorResponse,
+                failedEvent,
+                cancellationToken);
         }
+        else
+        {
+            await _resultStore.SaveAttemptResultAsync(job.JobId, attempt.AttemptId, errorResponse, cancellationToken);
+            await _resultStore.SaveFinalResultAsync(job.JobId, errorResponse, cancellationToken);
+            await _jobStore.UpdateAsync(job, expectedUpdatedAt, cancellationToken);
+            if (failedEvent is not null)
+            {
+                await _eventStore.AppendAsync(failedEvent, cancellationToken);
+            }
 
-        await _dedupeStore.MarkCompletedAsync(job.JobId, attempt.AttemptId, cancellationToken);
+            await _dedupeStore.MarkCompletedAsync(job.JobId, attempt.AttemptId, cancellationToken);
+        }
         _logger.LogError("Result failed with no retry plan.");
         return ResultIngestionOutcome.Finalized(errorResponse);
     }
