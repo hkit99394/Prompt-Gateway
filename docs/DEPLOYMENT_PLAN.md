@@ -302,7 +302,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 - [x] T-3.2.1 – T-3.2.11: CI steps
 
 ### CD
-- [ ] T-4.1.1 – T-4.1.3: CD dev
+- [x] T-4.1.1 – T-4.1.3: CD dev
 - [ ] T-4.2.1 – T-4.2.6: CD staging/prod
 - [ ] T-4.3.1 – T-4.3.15: CD pipeline steps
 

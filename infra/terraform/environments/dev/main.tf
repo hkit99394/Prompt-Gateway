@@ -65,7 +65,8 @@ module "ecs_service" {
   alb_security_group_id        = module.network.alb_security_group_id
   ecs_api_security_group_id    = module.network.ecs_api_security_group_id
   ecs_worker_security_group_id = module.network.ecs_worker_security_group_id
-  ecs_execution_role_arn       = module.iam.ecs_execution_role_arn
+  ecs_execution_control_plane_role_arn   = module.iam.ecs_execution_control_plane_role_arn
+  ecs_execution_provider_worker_role_arn = module.iam.ecs_execution_provider_worker_role_arn
   control_plane_task_role_arn  = module.iam.control_plane_task_role_arn
   provider_worker_task_role_arn = module.iam.provider_worker_task_role_arn
   dynamodb_table_name          = module.dynamodb.table_name

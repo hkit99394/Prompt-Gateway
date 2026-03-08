@@ -1,0 +1,119 @@
+# CD workflow - deploy to dev on push to main
+# Implementation: T-4.1.x, T-4.3.x
+#
+# Prerequisites:
+# - Configure GitHub OIDC with AWS (oidc-provider, IAM role)
+# - Add AWS_ROLE_ARN to the dev environment (or repo secret)
+# - Ensure ECR repos, ECS cluster, and task definitions exist (terraform apply)
+
+name: CD Dev
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    environment: dev
+
+    permissions:
+      id-token: write   # Required for OIDC with AWS
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-authorization-token@v2
+
+      - name: Set ECR registry
+        id: registry
+        run: |
+          echo "registry=$(echo ${{ steps.ecr.outputs.registry }} | sed 's|https://||')" >> $GITHUB_OUTPUT
+
+      - name: Build and push Control Plane API
+        env:
+          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
+          ECR_REPO_API: prompt-gateway-dev-control-plane-api
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPO_API:latest \
+            -f "./Prompt Gateway – Control Plane /src/ControlPlane.Api/Dockerfile" \
+            "./Prompt Gateway – Control Plane /src"
+          docker push $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPO_API:latest
+
+      - name: Build and push Provider Worker
+        env:
+          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
+          ECR_REPO_WORKER: prompt-gateway-dev-provider-worker
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPO_WORKER:latest \
+            -f "./Prompt Gateway Provider - OpenAI/src/Provider.Worker.Host/Dockerfile" \
+            "./Prompt Gateway Provider - OpenAI/src"
+          docker push $ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPO_WORKER:latest
+
+      - name: Update and register task definitions
+        env:
+          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          API_IMAGE="$ECR_REGISTRY/prompt-gateway-dev-control-plane-api:$IMAGE_TAG"
+          WORKER_IMAGE="$ECR_REGISTRY/prompt-gateway-dev-provider-worker:$IMAGE_TAG"
+
+          aws ecs describe-task-definition --task-definition prompt-gateway-dev-control-plane-api \
+            | jq '.taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = "'"$API_IMAGE"'"' \
+            > /tmp/api-taskdef.json
+          aws ecs describe-task-definition --task-definition prompt-gateway-dev-provider-worker \
+            | jq '.taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = "'"$WORKER_IMAGE"'"' \
+            > /tmp/worker-taskdef.json
+
+          aws ecs register-task-definition --cli-input-json file:///tmp/api-taskdef.json
+          aws ecs register-task-definition --cli-input-json file:///tmp/worker-taskdef.json
+
+      - name: Update ECS API service
+        run: |
+          aws ecs update-service \
+            --cluster prompt-gateway-dev \
+            --service control-plane-api \
+            --task-definition prompt-gateway-dev-control-plane-api \
+            --force-new-deployment \
+            --no-cli-pager
+
+      - name: Update ECS worker service
+        run: |
+          aws ecs update-service \
+            --cluster prompt-gateway-dev \
+            --service provider-worker \
+            --task-definition prompt-gateway-dev-provider-worker \
+            --force-new-deployment \
+            --no-cli-pager
+
+      - name: Wait for services to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster prompt-gateway-dev \
+            --services control-plane-api provider-worker
+
+      - name: Smoke test - health check
+        run: |
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names prompt-gateway-dev \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text)
+          echo "ALB DNS: $ALB_DNS"
+          curl -sf "http://$ALB_DNS/health" || (echo "Health check failed" && exit 1)

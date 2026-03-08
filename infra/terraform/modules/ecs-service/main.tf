@@ -177,7 +177,7 @@ resource "aws_ecs_task_definition" "control_plane_api" {
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.api_cpu
   memory                   = var.api_memory
-  execution_role_arn       = var.ecs_execution_role_arn
+  execution_role_arn       = var.ecs_execution_control_plane_role_arn
   task_role_arn            = var.control_plane_task_role_arn
 
   container_definitions = jsonencode([
@@ -241,7 +241,7 @@ resource "aws_ecs_task_definition" "provider_worker" {
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.worker_cpu
   memory                   = var.worker_memory
-  execution_role_arn       = var.ecs_execution_role_arn
+  execution_role_arn       = var.ecs_execution_provider_worker_role_arn
   task_role_arn            = var.provider_worker_task_role_arn
 
   container_definitions = jsonencode([

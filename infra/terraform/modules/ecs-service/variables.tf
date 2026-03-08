@@ -36,8 +36,13 @@ variable "ecs_worker_security_group_id" {
   type        = string
 }
 
-variable "ecs_execution_role_arn" {
-  description = "ECS task execution role ARN"
+variable "ecs_execution_control_plane_role_arn" {
+  description = "ECS task execution role ARN for Control Plane API"
+  type        = string
+}
+
+variable "ecs_execution_provider_worker_role_arn" {
+  description = "ECS task execution role ARN for Provider Worker"
   type        = string
 }
 

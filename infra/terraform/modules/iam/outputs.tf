@@ -1,9 +1,14 @@
 # IAM module outputs
 # Implementation: T-2.5.10
 
-output "ecs_execution_role_arn" {
-  description = "ECS task execution role ARN"
-  value       = aws_iam_role.ecs_execution.arn
+output "ecs_execution_control_plane_role_arn" {
+  description = "ECS task execution role ARN for Control Plane API (ECR, logs, API keys secret)"
+  value       = aws_iam_role.ecs_execution_control_plane.arn
+}
+
+output "ecs_execution_provider_worker_role_arn" {
+  description = "ECS task execution role ARN for Provider Worker (ECR, logs, OpenAI key secret)"
+  value       = aws_iam_role.ecs_execution_provider_worker.arn
 }
 
 output "control_plane_task_role_arn" {

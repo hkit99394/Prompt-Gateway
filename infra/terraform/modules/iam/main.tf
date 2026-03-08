@@ -18,9 +18,10 @@ locals {
   has_s3     = var.prompts_bucket_arn != "" && var.results_bucket_arn != ""
 }
 
-# T-2.5.1: ECS task execution role (pull images, write logs)
-resource "aws_iam_role" "ecs_execution" {
-  name = "prompt-gateway-${var.environment}-ecs-execution"
+# T-2.5.1: ECS task execution roles (pull images, write logs, fetch secrets at startup)
+# Split by task type for least privilege: each role only accesses its own secrets
+resource "aws_iam_role" "ecs_execution_control_plane" {
+  name = "prompt-gateway-${var.environment}-ecs-execution-api"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -36,21 +37,48 @@ resource "aws_iam_role" "ecs_execution" {
   })
 
   tags = {
-    Name        = "prompt-gateway-${var.environment}-ecs-execution"
+    Name        = "prompt-gateway-${var.environment}-ecs-execution-api"
     Environment = var.environment
   }
 }
 
-# T-2.5.2: Attach AmazonECSTaskExecutionRolePolicy
-resource "aws_iam_role_policy_attachment" "ecs_execution" {
-  role       = aws_iam_role.ecs_execution.name
+resource "aws_iam_role" "ecs_execution_provider_worker" {
+  name = "prompt-gateway-${var.environment}-ecs-execution-worker"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "prompt-gateway-${var.environment}-ecs-execution-worker"
+    Environment = var.environment
+  }
+}
+
+# T-2.5.2: Attach AmazonECSTaskExecutionRolePolicy (ECR, CloudWatch logs)
+resource "aws_iam_role_policy_attachment" "ecs_execution_control_plane" {
+  role       = aws_iam_role.ecs_execution_control_plane.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Execution role needs Secrets Manager access for container secrets (valueFrom)
-resource "aws_iam_role_policy" "ecs_execution_secrets" {
+resource "aws_iam_role_policy_attachment" "ecs_execution_provider_worker" {
+  role       = aws_iam_role.ecs_execution_provider_worker.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+# Execution role: Control Plane gets API keys only (least privilege)
+resource "aws_iam_role_policy" "ecs_execution_control_plane_secrets" {
   name = "secrets"
-  role = aws_iam_role.ecs_execution.id
+  role = aws_iam_role.ecs_execution_control_plane.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -58,7 +86,24 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
       {
         Effect   = "Allow"
         Action   = "secretsmanager:GetSecretValue"
-        Resource = concat(local.control_plane_secrets_arns, local.provider_worker_secrets_arns)
+        Resource = local.control_plane_secrets_arns
+      }
+    ]
+  })
+}
+
+# Execution role: Provider Worker gets OpenAI key only (least privilege)
+resource "aws_iam_role_policy" "ecs_execution_provider_worker_secrets" {
+  name = "secrets"
+  role = aws_iam_role.ecs_execution_provider_worker.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = local.provider_worker_secrets_arns
       }
     ]
   })
