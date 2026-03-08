@@ -15,7 +15,6 @@ locals {
     "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:prompt-gateway/${var.environment}/openai-api-key*"
   ]
   ssm_prefix = "arn:aws:ssm:${local.region}:${local.account_id}:parameter/prompt-gateway/${var.environment}/*"
-  has_s3     = var.prompts_bucket_arn != "" && var.results_bucket_arn != ""
 }
 
 # T-2.5.1: ECS task execution roles (pull images, write logs, fetch secrets at startup)
@@ -185,11 +184,10 @@ resource "aws_iam_role_policy" "control_plane_sqs" {
   })
 }
 
-# T-2.5.6: S3 policy for Control Plane (when buckets provided)
+# T-2.5.6: S3 policy for Control Plane
 resource "aws_iam_role_policy" "control_plane_s3" {
-  count  = local.has_s3 ? 1 : 0
-  name   = "s3"
-  role   = aws_iam_role.control_plane.id
+  name = "s3"
+  role = aws_iam_role.control_plane.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -312,11 +310,10 @@ resource "aws_iam_role_policy" "provider_worker_dynamodb" {
   })
 }
 
-# T-2.5.9: S3 policy for Provider Worker (when buckets provided)
+# T-2.5.9: S3 policy for Provider Worker
 resource "aws_iam_role_policy" "provider_worker_s3" {
-  count  = local.has_s3 ? 1 : 0
-  name   = "s3"
-  role   = aws_iam_role.provider_worker.id
+  name = "s3"
+  role = aws_iam_role.provider_worker.id
 
   policy = jsonencode({
     Version = "2012-10-17"
