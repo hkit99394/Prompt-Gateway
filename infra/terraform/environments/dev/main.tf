@@ -27,9 +27,10 @@ module "network" {
 module "dynamodb" {
   source = "../../modules/dynamodb"
 
-  environment = var.environment
-  table_name  = "prompt-gateway-${var.environment}"
-  gsi_name    = "JobListIndex"
+  environment       = var.environment
+  table_name        = "prompt-gateway-${var.environment}"
+  dedupe_table_name = "prompt-gateway-${var.environment}-worker-dedupe"
+  gsi_name          = "JobListIndex"
 }
 
 module "sqs" {
@@ -47,12 +48,13 @@ module "s3" {
 module "iam" {
   source = "../../modules/iam"
 
-  environment         = var.environment
-  dynamodb_table_arn  = module.dynamodb.table_arn
-  dispatch_queue_arn  = module.sqs.dispatch_queue_arn
+  environment        = var.environment
+  dynamodb_table_arn = module.dynamodb.table_arn
+  dedupe_table_arn   = module.dynamodb.dedupe_table_arn
+  dispatch_queue_arn = module.sqs.dispatch_queue_arn
   result_queue_arn   = module.sqs.result_queue_arn
-  prompts_bucket_arn  = module.s3.prompts_bucket_arn
-  results_bucket_arn  = module.s3.results_bucket_arn
+  prompts_bucket_arn = module.s3.prompts_bucket_arn
+  results_bucket_arn = module.s3.results_bucket_arn
 }
 
 module "ecs_service" {
@@ -70,6 +72,7 @@ module "ecs_service" {
   control_plane_task_role_arn  = module.iam.control_plane_task_role_arn
   provider_worker_task_role_arn = module.iam.provider_worker_task_role_arn
   dynamodb_table_name          = module.dynamodb.table_name
+  worker_dedupe_table_name     = module.dynamodb.dedupe_table_name
   dynamodb_gsi_name            = module.dynamodb.gsi_name
   dispatch_queue_url           = module.sqs.dispatch_queue_url
   result_queue_url             = module.sqs.result_queue_url

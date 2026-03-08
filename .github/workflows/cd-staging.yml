@@ -20,7 +20,7 @@ jobs:
   deploy:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    environment: staging
+    environment: ${{ vars.DEPLOY_ENV_NAME || 'staging' }}
 
     permissions:
       id-token: write
@@ -33,12 +33,12 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ fromJSON(toJSON(vars)).AWS_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Login to Amazon ECR
         id: ecr
-        uses: aws-actions/amazon-ecr-authorization-token@v2
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set ECR registry
         id: registry

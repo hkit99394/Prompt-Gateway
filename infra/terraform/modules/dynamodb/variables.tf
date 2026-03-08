@@ -11,6 +11,11 @@ variable "table_name" {
   type        = string
 }
 
+variable "dedupe_table_name" {
+  description = "DynamoDB table name for Provider Worker deduplication entries"
+  type        = string
+}
+
 variable "gsi_name" {
   description = "GSI name for job listing (must match DynamoDbOptions.JobListIndexName)"
   type        = string

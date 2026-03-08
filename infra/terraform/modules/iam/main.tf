@@ -291,6 +291,27 @@ resource "aws_iam_role_policy" "provider_worker_sqs" {
   })
 }
 
+# T-2.5.9: DynamoDB policy for Provider Worker deduplication table
+resource "aws_iam_role_policy" "provider_worker_dynamodb" {
+  name = "dynamodb"
+  role = aws_iam_role.provider_worker.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = [var.dedupe_table_arn]
+      }
+    ]
+  })
+}
+
 # T-2.5.9: S3 policy for Provider Worker (when buckets provided)
 resource "aws_iam_role_policy" "provider_worker_s3" {
   count  = local.has_s3 ? 1 : 0

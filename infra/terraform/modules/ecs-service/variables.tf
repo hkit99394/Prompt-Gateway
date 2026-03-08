@@ -61,6 +61,11 @@ variable "dynamodb_table_name" {
   type        = string
 }
 
+variable "worker_dedupe_table_name" {
+  description = "DynamoDB table name for Provider Worker deduplication entries"
+  type        = string
+}
+
 variable "dynamodb_gsi_name" {
   description = "DynamoDB GSI name for job listing"
   type        = string

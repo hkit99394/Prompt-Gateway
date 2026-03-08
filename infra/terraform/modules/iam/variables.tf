@@ -11,6 +11,11 @@ variable "dynamodb_table_arn" {
   type        = string
 }
 
+variable "dedupe_table_arn" {
+  description = "DynamoDB dedupe table ARN for Provider Worker policy"
+  type        = string
+}
+
 variable "dispatch_queue_arn" {
   description = "Dispatch queue ARN for policy"
   type        = string

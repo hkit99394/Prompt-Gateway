@@ -51,3 +51,30 @@ resource "aws_dynamodb_table" "main" {
     Environment = var.environment
   }
 }
+
+# Provider Worker deduplication table (single hash key: id)
+resource "aws_dynamodb_table" "worker_dedupe" {
+  name         = var.dedupe_table_name
+  billing_mode = var.billing_mode
+
+  hash_key = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
+
+  tags = {
+    Name        = var.dedupe_table_name
+    Environment = var.environment
+  }
+}

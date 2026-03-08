@@ -256,7 +256,7 @@ resource "aws_ecs_task_definition" "provider_worker" {
           { name = "DOTNET_ENVIRONMENT", value = "Production" },
           { name = "ProviderWorker__InputQueueUrl", value = var.dispatch_queue_url },
           { name = "ProviderWorker__OutputQueueUrl", value = var.result_queue_url },
-          { name = "ProviderWorker__DedupeTableName", value = var.dynamodb_table_name }
+          { name = "ProviderWorker__DedupeTableName", value = var.worker_dedupe_table_name }
         ],
         var.prompts_bucket_name != "" ? [{ name = "ProviderWorker__PromptBucket", value = var.prompts_bucket_name }] : [],
         var.results_bucket_name != "" ? [{ name = "ProviderWorker__ResultBucket", value = var.results_bucket_name }] : []

@@ -59,7 +59,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | T-2.3.3 | Enable TTL on attribute `ttl` |
 | T-2.3.4 | Set billing mode (on-demand or provisioned) |
 | T-2.3.5 | Add server-side encryption (AWS managed key) |
-| T-2.3.6 | Output: `table_name`, `table_arn`, `gsi_name` |
+| T-2.3.6 | Output: `table_name`, `table_arn`, `gsi_name`, `dedupe_table_name`, `dedupe_table_arn` |
 
 ### 2.4 SQS module
 
@@ -84,7 +84,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | T-2.5.6 | Policy: S3 (GetObject, PutObject) on prompts + results buckets |
 | T-2.5.7 | Policy: Secrets Manager (GetSecretValue) for API keys |
 | T-2.5.8 | Policy: SSM (GetParameter) for config |
-| T-2.5.9 | Create IAM role for Provider Worker task (SQS, S3, Secrets Manager for OpenAI key) |
+| T-2.5.9 | Create IAM role for Provider Worker task (SQS, DynamoDB dedupe table, S3, Secrets Manager for OpenAI key) |
 | T-2.5.10 | Output: `ecs_execution_role_arn`, `control_plane_task_role_arn`, `provider_worker_task_role_arn` |
 
 ### 2.6 ECS service module
@@ -253,7 +253,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | T-6.7 | Create SSM parameter: `S3__PromptsBucket`, `S3__ResultsBucket` (if used) |
 | T-6.8 | Wire ECS task definition `secrets` block to Secrets Manager ARNs |
 | T-6.9 | Wire `environment` or `secrets` for SSM params (or use custom entrypoint to fetch at startup) |
-| T-6.10 | Document required env vars: `ApiSecurity__ApiKeys__0`, `OpenAI__ApiKey`, etc. |
+| T-6.10 | Document required env vars: `ApiSecurity__ApiKeys__0` (or `ApiSecurity__ApiKey` as single key/JSON array), `ProviderWorker__OpenAi__ApiKey`, etc. |
 
 ---
 
