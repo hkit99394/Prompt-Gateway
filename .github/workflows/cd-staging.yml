@@ -1,11 +1,13 @@
 # CD workflow - deploy to staging (manual)
-# Implementation: T-4.2.1, T-4.2.2, T-4.2.3
+# Implementation: T-4.2.1, T-4.2.2, T-4.2.3, T-4.3.15, T-7.9
 #
 # Prerequisites:
 # - Configure GitHub OIDC with AWS
 # - Add AWS_ROLE_ARN to the staging environment
 # - Configure required reviewers in Settings → Environments → staging
 # - Ensure ECR repos, ECS cluster, and task definitions exist (terraform apply)
+# - For full smoke test: create secret prompt-gateway/staging/api-keys or set SMOKE_TEST_API_KEY
+# - Optional: set HEALTH_CHECK_BASE_URL for SSL verification (e.g. https://api.example.com)
 
 name: CD Staging
 
@@ -111,20 +113,32 @@ jobs:
             --cluster prompt-gateway-staging \
             --services control-plane-api provider-worker
 
-      - name: Smoke test - health check
+      - name: Smoke test
         env:
           HEALTH_CHECK_BASE_URL: ${{ vars.HEALTH_CHECK_BASE_URL }}
+          API_KEY: ${{ secrets.SMOKE_TEST_API_KEY }}
         run: |
           ALB_DNS=$(aws elbv2 describe-load-balancers \
             --names prompt-gateway-staging \
             --query 'LoadBalancers[0].DNSName' \
             --output text)
           BASE_URL="${HEALTH_CHECK_BASE_URL:-https://$ALB_DNS}"
-          echo "Health check URL: $BASE_URL/health"
-          # Use custom domain with full SSL verification when HEALTH_CHECK_BASE_URL is set
-          if [ -n "$HEALTH_CHECK_BASE_URL" ]; then
-            curl -sf "$BASE_URL/health" || (echo "Health check failed" && exit 1)
+          USE_INSECURE=""
+          [ -z "$HEALTH_CHECK_BASE_URL" ] && USE_INSECURE="--insecure"
+          echo "Smoke test BASE_URL: $BASE_URL"
+          if [ -z "$API_KEY" ]; then
+            API_KEY=$(aws secretsmanager get-secret-value \
+              --secret-id "prompt-gateway/staging/api-keys" \
+              --query SecretString --output text 2>/dev/null | jq -r '.[0] // empty')
+          fi
+          if [ -z "$API_KEY" ]; then
+            echo "Skipping full smoke test: no API key (set SMOKE_TEST_API_KEY or create secret)"
+            if [ -n "$USE_INSECURE" ]; then
+              curl -skf "$BASE_URL/health" || (echo "Health check failed" && exit 1)
+            else
+              curl -sf "$BASE_URL/health" || (echo "Health check failed" && exit 1)
+            fi
           else
-            # ALB DNS may not match cert; -k skips verification (set HEALTH_CHECK_BASE_URL for strict verification)
-            curl -skf "$BASE_URL/health" || (echo "Health check failed" && exit 1)
+            chmod +x scripts/smoke-test.sh
+            ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY" "$USE_INSECURE"
           fi

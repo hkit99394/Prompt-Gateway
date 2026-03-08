@@ -304,7 +304,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 ### CD
 - [x] T-4.1.1 – T-4.1.3: CD dev
 - [x] T-4.2.1 – T-4.2.6: CD staging/prod
-- [ ] T-4.3.1 – T-4.3.15: CD pipeline steps
+- [x] T-4.3.1 – T-4.3.15: CD pipeline steps
 
 ### First deploy
 - [ ] T-5.1.1 – T-5.1.8: Phase 1 – Infrastructure
@@ -316,7 +316,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 - [ ] T-6.1 – T-6.10
 
 ### Smoke test script
-- [ ] T-7.1 – T-7.9
+- [x] T-7.1 – T-7.9
 
 ### Rollback & resilience
 - [ ] T-8.1 – T-8.7

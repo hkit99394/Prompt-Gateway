@@ -1,10 +1,11 @@
 # CD workflow - deploy to dev on push to main
-# Implementation: T-4.1.x, T-4.3.x
+# Implementation: T-4.1.x, T-4.3.x, T-7.9
 #
 # Prerequisites:
 # - Configure GitHub OIDC with AWS (oidc-provider, IAM role)
 # - Add AWS_ROLE_ARN to the dev environment (or repo secret)
 # - Ensure ECR repos, ECS cluster, and task definitions exist (terraform apply)
+# - For full smoke test: create secret prompt-gateway/dev/api-keys (JSON array) or set SMOKE_TEST_API_KEY
 
 name: CD Dev
 
@@ -109,11 +110,25 @@ jobs:
             --cluster prompt-gateway-dev \
             --services control-plane-api provider-worker
 
-      - name: Smoke test - health check
+      - name: Smoke test
+        env:
+          API_KEY: ${{ secrets.SMOKE_TEST_API_KEY }}
         run: |
           ALB_DNS=$(aws elbv2 describe-load-balancers \
             --names prompt-gateway-dev \
             --query 'LoadBalancers[0].DNSName' \
             --output text)
-          echo "ALB DNS: $ALB_DNS"
-          curl -sf "http://$ALB_DNS/health" || (echo "Health check failed" && exit 1)
+          BASE_URL="http://$ALB_DNS"
+          echo "Smoke test BASE_URL: $BASE_URL"
+          if [ -z "$API_KEY" ]; then
+            API_KEY=$(aws secretsmanager get-secret-value \
+              --secret-id "prompt-gateway/dev/api-keys" \
+              --query SecretString --output text 2>/dev/null | jq -r '.[0] // empty')
+          fi
+          if [ -z "$API_KEY" ]; then
+            echo "Skipping full smoke test: no API key (set SMOKE_TEST_API_KEY or create secret)"
+            curl -sf "$BASE_URL/health" || (echo "Health check failed" && exit 1)
+          else
+            chmod +x scripts/smoke-test.sh
+            ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY"
+          fi
