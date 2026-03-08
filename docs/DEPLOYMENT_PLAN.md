@@ -187,7 +187,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | 12 | T-4.3.12 | Update ECS API service: `aws ecs update-service --force-new-deployment` |
 | 13 | T-4.3.13 | Update ECS worker service |
 | 14 | T-4.3.14 | Wait for services to stabilize (or use `aws ecs wait services-stable`) |
-| 15 | T-4.3.15 | Run smoke tests (see Section 7) |
+| 15 | T-4.3.15 | Run smoke tests (see Section 7). For staging/prod: set `HEALTH_CHECK_BASE_URL` env var (e.g. `https://api.example.com`) to use full SSL verification; otherwise ALB DNS is used with `-k` (skips cert verification). |
 
 ---
 
@@ -247,7 +247,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | T-6.3 | Create SSM parameter: `DynamoDb__TableName` |
 | T-6.4 | Create SSM parameter: `DynamoDb__JobListIndexName` |
 | T-6.5 | Create SSM parameter: `Sqs__DispatchQueueUrl` |
-| T-6.6 | Create SSM parameter: `Sqs__ResultQueueUrl` |
+| T-6.6 | Create SSM parameter: `Sqs__ResultQueueUrl` (Control Plane receives job results from this queue) |
 | T-6.7 | Create SSM parameter: `S3__PromptsBucket`, `S3__ResultsBucket` (if used) |
 | T-6.8 | Wire ECS task definition `secrets` block to Secrets Manager ARNs |
 | T-6.9 | Wire `environment` or `secrets` for SSM params (or use custom entrypoint to fetch at startup) |
@@ -303,7 +303,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 
 ### CD
 - [x] T-4.1.1 – T-4.1.3: CD dev
-- [ ] T-4.2.1 – T-4.2.6: CD staging/prod
+- [x] T-4.2.1 – T-4.2.6: CD staging/prod
 - [ ] T-4.3.1 – T-4.3.15: CD pipeline steps
 
 ### First deploy

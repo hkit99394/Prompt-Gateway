@@ -1,0 +1,130 @@
+# CD workflow - deploy to staging (manual)
+# Implementation: T-4.2.1, T-4.2.2, T-4.2.3
+#
+# Prerequisites:
+# - Configure GitHub OIDC with AWS
+# - Add AWS_ROLE_ARN to the staging environment
+# - Configure required reviewers in Settings → Environments → staging
+# - Ensure ECR repos, ECS cluster, and task definitions exist (terraform apply)
+
+name: CD Staging
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    environment: staging
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-authorization-token@v2
+
+      - name: Set ECR registry
+        id: registry
+        run: |
+          echo "registry=$(echo ${{ steps.ecr.outputs.registry }} | sed 's|https://||')" >> $GITHUB_OUTPUT
+
+      - name: Build and push Control Plane API
+        env:
+          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
+          ECR_REPO_API: prompt-gateway-staging-control-plane-api
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPO_API:latest \
+            -f "./Prompt Gateway – Control Plane /src/ControlPlane.Api/Dockerfile" \
+            "./Prompt Gateway – Control Plane /src"
+          docker push $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPO_API:latest
+
+      - name: Build and push Provider Worker
+        env:
+          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
+          ECR_REPO_WORKER: prompt-gateway-staging-provider-worker
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPO_WORKER:latest \
+            -f "./Prompt Gateway Provider - OpenAI/src/Provider.Worker.Host/Dockerfile" \
+            "./Prompt Gateway Provider - OpenAI/src"
+          docker push $ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPO_WORKER:latest
+
+      - name: Update and register task definitions
+        env:
+          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          API_IMAGE="$ECR_REGISTRY/prompt-gateway-staging-control-plane-api:$IMAGE_TAG"
+          WORKER_IMAGE="$ECR_REGISTRY/prompt-gateway-staging-provider-worker:$IMAGE_TAG"
+
+          aws ecs describe-task-definition --task-definition prompt-gateway-staging-control-plane-api \
+            | jq '.taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = "'"$API_IMAGE"'"' \
+            > /tmp/api-taskdef.json
+          aws ecs describe-task-definition --task-definition prompt-gateway-staging-provider-worker \
+            | jq '.taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = "'"$WORKER_IMAGE"'"' \
+            > /tmp/worker-taskdef.json
+
+          aws ecs register-task-definition --cli-input-json file:///tmp/api-taskdef.json
+          aws ecs register-task-definition --cli-input-json file:///tmp/worker-taskdef.json
+
+      - name: Update ECS API service
+        run: |
+          aws ecs update-service \
+            --cluster prompt-gateway-staging \
+            --service control-plane-api \
+            --task-definition prompt-gateway-staging-control-plane-api \
+            --force-new-deployment \
+            --no-cli-pager
+
+      - name: Update ECS worker service
+        run: |
+          aws ecs update-service \
+            --cluster prompt-gateway-staging \
+            --service provider-worker \
+            --task-definition prompt-gateway-staging-provider-worker \
+            --force-new-deployment \
+            --no-cli-pager
+
+      - name: Wait for services to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster prompt-gateway-staging \
+            --services control-plane-api provider-worker
+
+      - name: Smoke test - health check
+        env:
+          HEALTH_CHECK_BASE_URL: ${{ vars.HEALTH_CHECK_BASE_URL }}
+        run: |
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names prompt-gateway-staging \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text)
+          BASE_URL="${HEALTH_CHECK_BASE_URL:-https://$ALB_DNS}"
+          echo "Health check URL: $BASE_URL/health"
+          # Use custom domain with full SSL verification when HEALTH_CHECK_BASE_URL is set
+          if [ -n "$HEALTH_CHECK_BASE_URL" ]; then
+            curl -sf "$BASE_URL/health" || (echo "Health check failed" && exit 1)
+          else
+            # ALB DNS may not match cert; -k skips verification (set HEALTH_CHECK_BASE_URL for strict verification)
+            curl -skf "$BASE_URL/health" || (echo "Health check failed" && exit 1)
+          fi

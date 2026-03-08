@@ -40,6 +40,11 @@ public sealed class AwsDependenciesHealthCheck : IHealthCheck
             return HealthCheckResult.Unhealthy("AwsQueue:DispatchQueueUrl is not configured.");
         }
 
+        if (string.IsNullOrWhiteSpace(_queueOptions.ResultQueueUrl))
+        {
+            return HealthCheckResult.Unhealthy("AwsQueue:ResultQueueUrl is not configured.");
+        }
+
         try
         {
             await _dynamoDb.DescribeTableAsync(
@@ -50,6 +55,14 @@ public sealed class AwsDependenciesHealthCheck : IHealthCheck
                 new GetQueueAttributesRequest
                 {
                     QueueUrl = _queueOptions.DispatchQueueUrl,
+                    AttributeNames = new List<string> { QueueAttributeName.QueueArn }
+                },
+                cancellationToken);
+
+            await _sqs.GetQueueAttributesAsync(
+                new GetQueueAttributesRequest
+                {
+                    QueueUrl = _queueOptions.ResultQueueUrl,
                     AttributeNames = new List<string> { QueueAttributeName.QueueArn }
                 },
                 cancellationToken);

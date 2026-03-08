@@ -47,7 +47,8 @@ builder.Services.AddSingleton<IRetryPlanner>(_ => new FallbackRetryPlanner(retry
 
 var awsQueueOptions = new AwsQueueOptions
 {
-    DispatchQueueUrl = builder.Configuration["AwsQueue:DispatchQueueUrl"] ?? string.Empty
+    DispatchQueueUrl = builder.Configuration["AwsQueue:DispatchQueueUrl"] ?? string.Empty,
+    ResultQueueUrl = builder.Configuration["AwsQueue:ResultQueueUrl"] ?? string.Empty
 };
 
 var dynamoOptions = new DynamoDbOptions

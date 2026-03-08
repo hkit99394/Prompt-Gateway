@@ -185,7 +185,8 @@ public class ApiSecurityTests
             Environment.SetEnvironmentVariable("ApiSecurity__ApiKeys__0", ValidApiKey);
             Environment.SetEnvironmentVariable("ApiSecurity__ApiKeys__1", RotatedApiKey);
             Environment.SetEnvironmentVariable("AwsStorage__TableName", "test-table");
-            Environment.SetEnvironmentVariable("AwsQueue__DispatchQueueUrl", "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue");
+            Environment.SetEnvironmentVariable("AwsQueue__DispatchQueueUrl", "https://sqs.us-east-1.amazonaws.com/123456789012/test-dispatch");
+            Environment.SetEnvironmentVariable("AwsQueue__ResultQueueUrl", "https://sqs.us-east-1.amazonaws.com/123456789012/test-result");
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -199,7 +200,8 @@ public class ApiSecurityTests
                     ["Routing:PolicyVersion"] = "test",
                     ["Retry:MaxAttempts"] = "3",
                     ["AwsStorage:TableName"] = "test-table",
-                    ["AwsQueue:DispatchQueueUrl"] = "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue"
+                    ["AwsQueue:DispatchQueueUrl"] = "https://sqs.us-east-1.amazonaws.com/123456789012/test-dispatch",
+                    ["AwsQueue:ResultQueueUrl"] = "https://sqs.us-east-1.amazonaws.com/123456789012/test-result"
                 });
             });
 

@@ -198,6 +198,7 @@ resource "aws_ecs_task_definition" "control_plane_api" {
         { name = "ASPNETCORE_ENVIRONMENT", value = "Production" },
         { name = "ASPNETCORE_URLS", value = "http://+:8080" },
         { name = "AwsQueue__DispatchQueueUrl", value = var.dispatch_queue_url },
+        { name = "AwsQueue__ResultQueueUrl", value = var.result_queue_url },
         { name = "AwsStorage__TableName", value = var.dynamodb_table_name },
         { name = "AwsStorage__JobListIndexName", value = var.dynamodb_gsi_name }
       ]
