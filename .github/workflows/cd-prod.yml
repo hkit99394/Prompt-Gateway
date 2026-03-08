@@ -52,7 +52,7 @@ jobs:
           ECR_REPO_API: prompt-gateway-prod-control-plane-api
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG \
+          docker build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG \
             -t $ECR_REGISTRY/$ECR_REPO_API:latest \
             -f "./Prompt Gateway – Control Plane /src/ControlPlane.Api/Dockerfile" \
             "./Prompt Gateway – Control Plane /src"
@@ -65,7 +65,7 @@ jobs:
           ECR_REPO_WORKER: prompt-gateway-prod-provider-worker
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG \
+          docker build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG \
             -t $ECR_REGISTRY/$ECR_REPO_WORKER:latest \
             -f "./Prompt Gateway Provider - OpenAI/src/Provider.Worker.Host/Dockerfile" \
             "./Prompt Gateway Provider - OpenAI/src"

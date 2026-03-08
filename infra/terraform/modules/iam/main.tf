@@ -92,7 +92,7 @@ resource "aws_iam_role_policy" "ecs_execution_control_plane_secrets" {
       },
       {
         Effect   = "Allow"
-        Action   = "ssm:GetParameter"
+        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
         Resource = [local.ssm_api_keys_param_arn]
       }
     ]
@@ -114,7 +114,7 @@ resource "aws_iam_role_policy" "ecs_execution_provider_worker_secrets" {
       },
       {
         Effect   = "Allow"
-        Action   = "ssm:GetParameter"
+        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
         Resource = [local.ssm_openai_key_param_arn]
       }
     ]

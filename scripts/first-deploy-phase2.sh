@@ -179,4 +179,4 @@ echo ""
 
 echo "=== Phase 2 complete. ==="
 echo ""
-echo "Next: Phase 3 (Application deploy) - build/push images, deploy ECS. See docs/DEPLOYMENT_PLAN.md T-5.3"
+echo "Next: Phase 3 (Application deploy) - run ./scripts/first-deploy-phase3.sh (see docs/DEPLOYMENT_PLAN.md T-5.3)"

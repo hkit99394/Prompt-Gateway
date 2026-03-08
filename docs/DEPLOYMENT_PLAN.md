@@ -230,6 +230,8 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | 3.5 | T-5.3.5 | Deploy Provider Worker service |
 | 3.6 | T-5.3.6 | Verify tasks are running (ECS console or CLI) |
 
+**Automation:** Run `./scripts/first-deploy-phase3.sh` to execute T-5.3.1 – T-5.3.6. Requires Phase 1 and Phase 2 complete, Docker and `jq` installed. Optional env vars: `ENV` (dev | staging | prod), `IMAGE_TAG` (default: latest), `AWS_REGION` (default: us-east-1). Use `--build-only` to only build and push images without updating ECS; use `--skip-verify` to skip waiting for services to stabilize.
+
 ### Phase 4: Smoke tests
 
 | Step | Task | Description |
@@ -289,7 +291,42 @@ This document describes the target architecture, infrastructure-as-code layout, 
 
 ---
 
-## 9. Master Task Checklist
+## 9. Troubleshooting
+
+### ECS: "secret was marked for deletion" (InvalidRequestException) in dev
+
+**Cause:** The running ECS task definition revision was created by Phase 3 or CD (describe → update image → register). That revision kept the **secrets** from the previous revision, which pointed at Secrets Manager. In dev, API keys and OpenAI key are stored in **SSM Parameter Store**, not Secrets Manager. If the secret in Secrets Manager was deleted (or marked for deletion), ECS fails when pulling it.
+
+**Fix:**
+
+1. Re-apply Terraform for dev so it registers a new task definition revision that uses SSM:
+   ```bash
+   cd infra/terraform/environments/dev
+   terraform apply -var-file=dev.tfvars
+   ```
+2. Force the ECS services to use the new revision:
+   ```bash
+   aws ecs update-service --cluster prompt-gateway-dev --service control-plane-api --force-new-deployment --region us-east-1 --no-cli-pager
+   aws ecs update-service --cluster prompt-gateway-dev --service provider-worker --force-new-deployment --region us-east-1 --no-cli-pager
+   ```
+
+After this, the active task definition will use SSM (`/prompt-gateway/dev/api-keys` and `/prompt-gateway/dev/openai-api-key`). Ensure Phase 2 has created those SSM parameters.
+
+### ECS: control-plane-api "failed container health checks"
+
+**Cause:** The ECS task definition runs `curl -f http://localhost:8080/health` for the container health check. The Microsoft `aspnet` runtime image does **not** include `curl`, so the check fails and ECS marks the task unhealthy.
+
+**Fix:** The Control Plane API Dockerfile installs `curl` in the final stage so the health check succeeds. Rebuild and push the image, then force a new deployment:
+
+```bash
+ENV=dev ./scripts/first-deploy-phase3.sh
+```
+
+If health checks still fail after curl is added, check CloudWatch Logs for the task: the app may be crashing on startup (e.g. missing config or AWS dependency). Increase the task definition’s health check `startPeriod` (e.g. to 90s) if the app needs longer to start.
+
+---
+
+## 10. Master Task Checklist
 
 ### IaC
 - [x] T-2.1.1 – T-2.1.5: Repository structure
@@ -313,7 +350,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 ### First deploy
 - [x] T-5.1.1 – T-5.1.8: Phase 1 – Infrastructure (script: `scripts/first-deploy-phase1.sh`)
 - [x] T-5.2.1 – T-5.2.4: Phase 2 – Config & secrets
-- [ ] T-5.3.1 – T-5.3.6: Phase 3 – Application deploy
+- [x] T-5.3.1 – T-5.3.6: Phase 3 – Application deploy (script: `scripts/first-deploy-phase3.sh`)
 - [ ] T-5.4.1 – T-5.4.5: Phase 4 – Smoke tests
 
 ### Secrets & config

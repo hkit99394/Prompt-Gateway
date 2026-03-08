@@ -19,6 +19,9 @@ RUN dotnet publish "ControlPlane.Api/ControlPlane.Api.csproj" -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
+# ECS container health check uses curl; aspnet runtime image does not include it
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=publish /app/publish .
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "ControlPlane.Api.dll"]

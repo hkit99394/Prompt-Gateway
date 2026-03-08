@@ -49,7 +49,7 @@ jobs:
           ECR_REPO_API: prompt-gateway-dev-control-plane-api
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG \
+          docker build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG \
             -t $ECR_REGISTRY/$ECR_REPO_API:latest \
             -f "./Prompt Gateway – Control Plane /src/ControlPlane.Api/Dockerfile" \
             "./Prompt Gateway – Control Plane /src"
@@ -62,7 +62,7 @@ jobs:
           ECR_REPO_WORKER: prompt-gateway-dev-provider-worker
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG \
+          docker build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG \
             -t $ECR_REGISTRY/$ECR_REPO_WORKER:latest \
             -f "./Prompt Gateway Provider - OpenAI/src/Provider.Worker.Host/Dockerfile" \
             "./Prompt Gateway Provider - OpenAI/src"
@@ -76,12 +76,17 @@ jobs:
         run: |
           API_IMAGE="$ECR_REGISTRY/prompt-gateway-dev-control-plane-api:$IMAGE_TAG"
           WORKER_IMAGE="$ECR_REGISTRY/prompt-gateway-dev-provider-worker:$IMAGE_TAG"
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          REGION=us-east-1
+          # Dev uses SSM (not Secrets Manager); set secrets explicitly so we never inherit a SM ARN
+          API_KEYS_SSM="arn:aws:ssm:${REGION}:${ACCOUNT}:parameter/prompt-gateway/dev/api-keys"
+          OPENAI_SSM="arn:aws:ssm:${REGION}:${ACCOUNT}:parameter/prompt-gateway/dev/openai-api-key"
 
           aws ecs describe-task-definition --task-definition prompt-gateway-dev-control-plane-api \
-            | jq '.taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = "'"$API_IMAGE"'"' \
+            | jq '.taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = "'"$API_IMAGE"'" | .containerDefinitions[0].secrets = [{"name":"ApiSecurity__ApiKey","valueFrom":"'"$API_KEYS_SSM"'"}]' \
             > /tmp/api-taskdef.json
           aws ecs describe-task-definition --task-definition prompt-gateway-dev-provider-worker \
-            | jq '.taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = "'"$WORKER_IMAGE"'"' \
+            | jq '.taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = "'"$WORKER_IMAGE"'" | .containerDefinitions[0].secrets = [{"name":"ProviderWorker__OpenAi__ApiKey","valueFrom":"'"$OPENAI_SSM"'"}]' \
             > /tmp/worker-taskdef.json
 
           aws ecs register-task-definition --cli-input-json file:///tmp/api-taskdef.json
