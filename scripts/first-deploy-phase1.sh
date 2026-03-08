@@ -144,4 +144,4 @@ echo ""
 
 echo "=== Phase 1 complete. All verifications passed. ==="
 echo ""
-echo "Next: Phase 2 (Config & secrets) - see docs/DEPLOYMENT_PLAN.md T-5.2"
+echo "Next: Phase 2 (Config & secrets) - run ./scripts/first-deploy-phase2.sh (see docs/DEPLOYMENT_PLAN.md T-5.2)"

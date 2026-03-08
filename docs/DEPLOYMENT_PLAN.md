@@ -212,10 +212,12 @@ This document describes the target architecture, infrastructure-as-code layout, 
 
 | Step | Task | Description |
 |------|------|--------------|
-| 2.1 | T-5.2.1 | Create secret in Secrets Manager: `prompt-gateway/dev/api-keys` (JSON array of keys) |
-| 2.2 | T-5.2.2 | Create secret: `prompt-gateway/dev/openai-api-key` |
+| 2.1 | T-5.2.1 | Create API keys (JSON array). **Dev:** SSM Parameter Store SecureString `prompt-gateway/dev/api-keys` (no Secrets Manager cost). **Staging/prod:** Secrets Manager `prompt-gateway/<env>/api-keys`. |
+| 2.2 | T-5.2.2 | Create OpenAI key. **Dev:** SSM SecureString `prompt-gateway/dev/openai-api-key`. **Staging/prod:** Secrets Manager `prompt-gateway/<env>/openai-api-key`. |
 | 2.3 | T-5.2.3 | Create SSM params: DynamoDB table name, queue URLs, S3 bucket names |
-| 2.4 | T-5.2.4 | Grant ECS task roles permission to read these secrets/params |
+| 2.4 | T-5.2.4 | Grant ECS task roles permission to read these secrets/params (SSM for dev secrets; Secrets Manager for staging/prod) |
+
+**Automation:** Run `./scripts/first-deploy-phase2.sh` to execute T-5.2.1 – T-5.2.4. For **dev**, API keys and OpenAI key are stored in Parameter Store (SecureString) to avoid Secrets Manager per-secret cost; staging and prod use Secrets Manager. Optional env vars: `API_KEYS_JSON` (e.g. `'["key1","key2"]'`), `OPENAI_API_KEY`. If `API_KEYS_JSON` is not set and Bitwarden CLI (`bw`) is installed and unlocked, the script will generate a new API key and create a secure note in Bitwarden (e.g. "Prompt Gateway dev API keys") before writing to AWS. Use `--skip-secrets` or `--skip-ssm` to run only part of the phase. Requires Phase 1 complete and `jq` installed.
 
 ### Phase 3: Application deploy
 
@@ -310,7 +312,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 
 ### First deploy
 - [x] T-5.1.1 – T-5.1.8: Phase 1 – Infrastructure (script: `scripts/first-deploy-phase1.sh`)
-- [ ] T-5.2.1 – T-5.2.4: Phase 2 – Config & secrets
+- [x] T-5.2.1 – T-5.2.4: Phase 2 – Config & secrets
 - [ ] T-5.3.1 – T-5.3.6: Phase 3 – Application deploy
 - [ ] T-5.4.1 – T-5.4.5: Phase 4 – Smoke tests
 

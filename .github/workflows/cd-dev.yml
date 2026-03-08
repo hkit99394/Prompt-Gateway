@@ -5,7 +5,7 @@
 # - Configure GitHub OIDC with AWS (oidc-provider, IAM role)
 # - Add AWS_ROLE_ARN to the dev environment (or repo secret)
 # - Ensure ECR repos, ECS cluster, and task definitions exist (terraform apply)
-# - For full smoke test: create secret prompt-gateway/dev/api-keys (JSON array) or set SMOKE_TEST_API_KEY
+# - For full smoke test: set SMOKE_TEST_API_KEY, or dev uses SSM /prompt-gateway/dev/api-keys (JSON array)
 
 name: CD Dev
 
@@ -122,6 +122,9 @@ jobs:
             --output text)
           BASE_URL="http://$ALB_DNS"
           echo "Smoke test BASE_URL: $BASE_URL"
+          if [ -z "$API_KEY" ]; then
+            API_KEY=$(aws ssm get-parameter --name "/prompt-gateway/dev/api-keys" --with-decryption --query Parameter.Value --output text 2>/dev/null | jq -r '.[0] // empty')
+          fi
           if [ -z "$API_KEY" ]; then
             API_KEY=$(aws secretsmanager get-secret-value \
               --secret-id "prompt-gateway/dev/api-keys" \

@@ -15,6 +15,9 @@ locals {
     "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:prompt-gateway/${var.environment}/openai-api-key*"
   ]
   ssm_prefix = "arn:aws:ssm:${local.region}:${local.account_id}:parameter/prompt-gateway/${var.environment}/*"
+  # Dev stores api-keys and openai-api-key in SSM; execution role needs GetParameter to inject them
+  ssm_api_keys_param_arn   = "arn:aws:ssm:${local.region}:${local.account_id}:parameter/prompt-gateway/${var.environment}/api-keys"
+  ssm_openai_key_param_arn = "arn:aws:ssm:${local.region}:${local.account_id}:parameter/prompt-gateway/${var.environment}/openai-api-key"
 }
 
 # T-2.5.1: ECS task execution roles (pull images, write logs, fetch secrets at startup)
@@ -74,7 +77,7 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_provider_worker" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Execution role: Control Plane gets API keys only (least privilege)
+# Execution role: Control Plane gets API keys (Secrets Manager or SSM for dev)
 resource "aws_iam_role_policy" "ecs_execution_control_plane_secrets" {
   name = "secrets"
   role = aws_iam_role.ecs_execution_control_plane.id
@@ -86,12 +89,17 @@ resource "aws_iam_role_policy" "ecs_execution_control_plane_secrets" {
         Effect   = "Allow"
         Action   = "secretsmanager:GetSecretValue"
         Resource = local.control_plane_secrets_arns
+      },
+      {
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = [local.ssm_api_keys_param_arn]
       }
     ]
   })
 }
 
-# Execution role: Provider Worker gets OpenAI key only (least privilege)
+# Execution role: Provider Worker gets OpenAI key (Secrets Manager or SSM for dev)
 resource "aws_iam_role_policy" "ecs_execution_provider_worker_secrets" {
   name = "secrets"
   role = aws_iam_role.ecs_execution_provider_worker.id
@@ -103,6 +111,11 @@ resource "aws_iam_role_policy" "ecs_execution_provider_worker_secrets" {
         Effect   = "Allow"
         Action   = "secretsmanager:GetSecretValue"
         Resource = local.provider_worker_secrets_arns
+      },
+      {
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = [local.ssm_openai_key_param_arn]
       }
     ]
   })

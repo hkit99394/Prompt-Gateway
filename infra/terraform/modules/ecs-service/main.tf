@@ -11,6 +11,9 @@ locals {
   worker_image          = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/prompt-gateway-${var.environment}-provider-worker:latest"
   api_keys_secret_arn   = "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:prompt-gateway/${var.environment}/api-keys"
   openai_key_secret_arn = "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:prompt-gateway/${var.environment}/openai-api-key"
+  # Dev uses SSM Parameter Store (no Secrets Manager cost); staging/prod use Secrets Manager
+  api_keys_value_from   = var.environment == "dev" ? "arn:aws:ssm:${local.region}:${local.account_id}:parameter/prompt-gateway/${var.environment}/api-keys" : local.api_keys_secret_arn
+  openai_key_value_from = var.environment == "dev" ? "arn:aws:ssm:${local.region}:${local.account_id}:parameter/prompt-gateway/${var.environment}/openai-api-key" : local.openai_key_secret_arn
   use_https             = var.certificate_arn != ""
 }
 
@@ -206,7 +209,7 @@ resource "aws_ecs_task_definition" "control_plane_api" {
       secrets = [
         {
           name      = "ApiSecurity__ApiKey"
-          valueFrom = local.api_keys_secret_arn
+          valueFrom = local.api_keys_value_from
         }
       ]
 
@@ -265,7 +268,7 @@ resource "aws_ecs_task_definition" "provider_worker" {
       secrets = [
         {
           name      = "ProviderWorker__OpenAi__ApiKey"
-          valueFrom = local.openai_key_secret_arn
+          valueFrom = local.openai_key_value_from
         }
       ]
 
