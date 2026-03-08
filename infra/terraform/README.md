@@ -2,7 +2,7 @@
 
 IaC for the Control Plane and Provider Worker (ECS Fargate, DynamoDB, SQS, S3, etc.).
 
-> **Note:** Module `main.tf` files are skeletons. Implement resources per `docs/DEPLOYMENT_PLAN.md` (T-2.2 through T-2.8) before running `terraform apply`.
+> **Note:** Ensure modules are implemented per `docs/DEPLOYMENT_PLAN.md` (T-2.2 through T-2.8) before running `terraform apply`.
 
 ## Structure
 
@@ -43,4 +43,23 @@ terraform apply -var-file=dev.tfvars
 
 ## First-time backend setup
 
-If the S3 bucket and DynamoDB table don't exist yet, run `terraform init` with a local backend first, or create the backend resources manually, then run `terraform init` to migrate state.
+Run the bootstrap script before first `terraform init`:
+
+```bash
+./scripts/bootstrap-terraform-backend.sh dev
+```
+
+Or create the backend resources manually:
+- S3 bucket: `prompt-gateway-terraform-state-{env}`
+- DynamoDB table: `prompt-gateway-terraform-locks-{env}`
+
+## First-deploy Phase 1 (T-5.1)
+
+To deploy dev infrastructure and verify:
+
+```bash
+./scripts/bootstrap-terraform-backend.sh dev   # if not done
+./scripts/first-deploy-phase1.sh
+```
+
+Options: `--plan-only` (plan without apply), `--skip-verify` (skip post-apply verification).

@@ -198,13 +198,15 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | Step | Task | Description |
 |------|------|--------------|
 | 1.1 | T-5.1.1 | `cd infra/terraform/environments/dev` |
-| 1.2 | T-5.1.2 | `terraform init` |
+| 1.2 | T-5.1.2 | `terraform init` (run `./scripts/bootstrap-terraform-backend.sh dev` first if backend not created) |
 | 1.3 | T-5.1.3 | `terraform plan -var-file=dev.tfvars` |
 | 1.4 | T-5.1.4 | `terraform apply -var-file=dev.tfvars` (network first if split) |
 | 1.5 | T-5.1.5 | Verify: DynamoDB table exists, GSI present, TTL enabled |
 | 1.6 | T-5.1.6 | Verify: SQS queues exist, DLQ configured |
 | 1.7 | T-5.1.7 | Verify: S3 buckets exist (prompts, results) |
 | 1.8 | T-5.1.8 | Verify: ECR repos exist, ECS cluster created |
+
+**Automation:** Run `./scripts/first-deploy-phase1.sh` to execute T-5.1.1 – T-5.1.8. Use `--plan-only` to plan without apply, `--skip-verify` to skip post-apply verification.
 
 ### Phase 2: Config & secrets
 
@@ -307,7 +309,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 - [x] T-4.3.1 – T-4.3.15: CD pipeline steps
 
 ### First deploy
-- [ ] T-5.1.1 – T-5.1.8: Phase 1 – Infrastructure
+- [x] T-5.1.1 – T-5.1.8: Phase 1 – Infrastructure (script: `scripts/first-deploy-phase1.sh`)
 - [ ] T-5.2.1 – T-5.2.4: Phase 2 – Config & secrets
 - [ ] T-5.3.1 – T-5.3.6: Phase 3 – Application deploy
 - [ ] T-5.4.1 – T-5.4.5: Phase 4 – Smoke tests

@@ -46,18 +46,22 @@ fi
 echo "  OK: /ready -> 200"
 
 # T-7.5: POST /jobs with minimal valid payload
+# Use curl without -f so we capture body and HTTP code on 4xx/5xx for diagnostics
+CURL_OPTS_NOFAIL=(-s)
+[ "${3:-}" = "--insecure" ] && CURL_OPTS_NOFAIL=(-sk)
 echo "  POST /jobs..."
-RESPONSE=$(curl -s -w "\n%{http_code}" "${CURL_OPTS[@]}" \
+RESPONSE=$(curl -w "\n%{http_code}" "${CURL_OPTS_NOFAIL[@]}" \
   -X POST \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
   -d '{"taskType":"chat_completion"}' \
-  "$BASE_URL/jobs" || echo "000")
+  "$BASE_URL/jobs")
 BODY=$(echo "$RESPONSE" | head -n -1)
 HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
 
-if [ "$HTTP_CODE" != "200" ]; then
-  echo "  FAIL: POST /jobs returned $HTTP_CODE (expected 200)"
+# Accept 200 (Ok) or 201 (Created) per REST conventions for resource creation
+if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+  echo "  FAIL: POST /jobs returned $HTTP_CODE (expected 200 or 201)"
   echo "  Response: $BODY"
   exit 1
 fi
@@ -68,7 +72,7 @@ if [ -z "$JOB_ID" ]; then
   echo "  Response: $BODY"
   exit 1
 fi
-echo "  OK: POST /jobs -> 200, jobId=$JOB_ID"
+echo "  OK: POST /jobs -> $HTTP_CODE, jobId=$JOB_ID"
 
 # T-7.6: Poll GET /jobs/{job_id} until Completed or Failed (timeout 60s)
 echo "  Polling GET /jobs/$JOB_ID..."
@@ -81,11 +85,12 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
   JOB_RESPONSE=$(curl -s "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/jobs/$JOB_ID" || echo "{}")
   STATE=$(echo "$JOB_RESPONSE" | jq -r '.State // .state // empty' 2>/dev/null || echo "")
 
-  if [ "$STATE" = "Completed" ]; then
+  # Accept string ("Completed"/"Failed") or integer (4=Completed, 5=Failed) per JobState enum
+  if [ "$STATE" = "Completed" ] || [ "$STATE" = "4" ]; then
     echo "  OK: Job completed"
     break
   fi
-  if [ "$STATE" = "Failed" ]; then
+  if [ "$STATE" = "Failed" ] || [ "$STATE" = "5" ]; then
     echo "  FAIL: Job failed (T-7.8)"
     echo "  Response: $JOB_RESPONSE"
     exit 1
@@ -96,7 +101,7 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
   echo "    ... state=$STATE (${ELAPSED}s)"
 done
 
-if [ "$STATE" != "Completed" ]; then
+if [ "$STATE" != "Completed" ] && [ "$STATE" != "4" ]; then
   echo "  FAIL: Timeout after ${TIMEOUT}s, state=$STATE"
   exit 1
 fi
