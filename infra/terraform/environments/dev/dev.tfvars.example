@@ -5,3 +5,5 @@
 
 aws_region  = "us-east-1"
 environment = "dev"
+# Optional: email for CloudWatch alarm notifications (T-8.6)
+# alarm_email = "ops@example.com"

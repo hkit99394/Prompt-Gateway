@@ -92,3 +92,17 @@ module "ecs_service" {
   worker_memory                 = 1024
   certificate_arn               = var.certificate_arn
 }
+
+# T-8.2 – T-8.6: CloudWatch alarms and SNS
+module "monitoring" {
+  source = "../../modules/monitoring"
+
+  environment            = var.environment
+  alb_arn_suffix         = module.ecs_service.alb_arn_suffix
+  target_group_arn_suffix = module.ecs_service.api_target_group_arn_suffix
+  ecs_cluster_name       = module.ecs_service.cluster_name
+  ecs_api_service_name   = module.ecs_service.api_service_name
+  sqs_dlq_name           = module.sqs.dlq_name
+  dynamodb_table_name    = module.dynamodb.table_name
+  alarm_email            = var.alarm_email
+}

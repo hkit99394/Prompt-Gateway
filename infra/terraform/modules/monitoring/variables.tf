@@ -1,0 +1,73 @@
+# Monitoring module variables
+# T-8.2 – T-8.6: CloudWatch alarms and SNS
+
+variable "environment" {
+  description = "Environment name (dev, staging, prod)"
+  type        = string
+}
+
+variable "alb_arn_suffix" {
+  description = "ALB ARN suffix for CloudWatch dimension (e.g. app/name/id)"
+  type        = string
+}
+
+variable "target_group_arn_suffix" {
+  description = "Target group ARN suffix for CloudWatch dimension (e.g. targetgroup/name/id)"
+  type        = string
+}
+
+variable "ecs_cluster_name" {
+  description = "ECS cluster name"
+  type        = string
+}
+
+variable "ecs_api_service_name" {
+  description = "Control Plane API ECS service name"
+  type        = string
+}
+
+variable "sqs_dlq_name" {
+  description = "SQS dead-letter queue name (for ApproximateNumberOfMessagesVisible alarm)"
+  type        = string
+}
+
+variable "dynamodb_table_name" {
+  description = "DynamoDB main table name (for throttle alarms)"
+  type        = string
+}
+
+variable "alarm_email" {
+  description = "Optional email address for SNS alarm notifications. If empty, topic is created but no subscription is added."
+  type        = string
+  default     = ""
+}
+
+variable "api_5xx_threshold" {
+  description = "Alarm when 5xx count exceeds this value in the evaluation period"
+  type        = number
+  default     = 5
+}
+
+variable "api_5xx_period_seconds" {
+  description = "Period in seconds for API 5xx metric"
+  type        = number
+  default     = 300
+}
+
+variable "api_5xx_evaluation_periods" {
+  description = "Number of periods the 5xx threshold must be breached"
+  type        = number
+  default     = 1
+}
+
+variable "ecs_cpu_threshold_percent" {
+  description = "Alarm when ECS API service CPU utilization exceeds this percentage"
+  type        = number
+  default     = 85
+}
+
+variable "ecs_memory_threshold_percent" {
+  description = "Alarm when ECS API service memory utilization exceeds this percentage"
+  type        = number
+  default     = 85
+}

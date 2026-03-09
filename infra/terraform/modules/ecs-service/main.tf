@@ -92,7 +92,7 @@ resource "aws_lb_target_group" "api" {
 
   health_check {
     enabled             = true
-    path                = "/health"
+    path                = "/ready"
     protocol            = "HTTP"
     healthy_threshold   = 2
     unhealthy_threshold = 3

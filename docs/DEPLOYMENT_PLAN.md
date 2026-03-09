@@ -317,6 +317,50 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | T-8.6 | Wire alarms to SNS topic (email or PagerDuty) |
 | T-8.7 | Ensure `/health` (liveness) and `/ready` (readiness) are used in ECS health checks |
 
+### T-8.1: ECS rollback
+
+To roll back the Control Plane API or Provider Worker to a previous task definition revision:
+
+1. List recent task definition revisions:
+   ```bash
+   aws ecs list-task-definitions --family prompt-gateway-<ENV>-control-plane-api --sort DESC --max-items 5 --region <REGION>
+   aws ecs list-task-definitions --family prompt-gateway-<ENV>-provider-worker --sort DESC --max-items 5 --region <REGION>
+   ```
+2. Update the service to use the previous revision (replace `<ENV>`, `<REVISION>`, and `<REGION>`):
+   ```bash
+   aws ecs update-service --cluster prompt-gateway-<ENV> --service control-plane-api \
+     --task-definition prompt-gateway-<ENV>-control-plane-api:<REVISION> \
+     --force-new-deployment --region <REGION> --no-cli-pager
+   ```
+   For the worker:
+   ```bash
+   aws ecs update-service --cluster prompt-gateway-<ENV> --service provider-worker \
+     --task-definition prompt-gateway-<ENV>-provider-worker:<REVISION> \
+     --force-new-deployment --region <REGION> --no-cli-pager
+   ```
+3. Wait for the service to stabilize:
+   ```bash
+   aws ecs wait services-stable --cluster prompt-gateway-<ENV> --services control-plane-api provider-worker --region <REGION>
+   ```
+
+**Example (dev):** Roll back the API to revision 3:  
+`aws ecs update-service --cluster prompt-gateway-dev --service control-plane-api --task-definition prompt-gateway-dev-control-plane-api:3 --force-new-deployment --region us-east-1 --no-cli-pager`
+
+### T-8.2 – T-8.6: CloudWatch alarms and SNS
+
+Implemented by the **monitoring** Terraform module (`infra/terraform/modules/monitoring/`):
+
+- **T-8.2:** Alarm `api_5xx` – ALB target group metric `HTTPCode_Target_5XX_Count`, threshold configurable.
+- **T-8.3:** Alarms `ecs_api_cpu` and `ecs_api_memory` – ECS service CPU and memory utilization.
+- **T-8.4:** Alarm `sqs_dlq_messages` – SQS DLQ `ApproximateNumberOfMessagesVisible` > 0.
+- **T-8.5:** Alarm `dynamodb_throttles` – DynamoDB throttle/error metrics for the main table.
+- **T-8.6:** All alarms notify an SNS topic. Optional email subscription via variable `alarm_email`; add PagerDuty or other subscriptions to the topic as needed.
+
+### T-8.7: Health and readiness checks
+
+- **Liveness:** ECS **container** health check uses `GET /health`. If it fails, ECS stops the task and replaces it.
+- **Readiness:** **ALB target group** health check uses `GET /ready`. Traffic is only sent to tasks that pass (DynamoDB and SQS verified).
+
 ---
 
 ## 9. Troubleshooting
@@ -412,4 +456,4 @@ If health checks still fail after curl is added, check CloudWatch Logs for the t
 - [x] T-7.1 – T-7.9
 
 ### Rollback & resilience
-- [ ] T-8.1 – T-8.7
+- [x] T-8.1 – T-8.7 (rollback doc §8; monitoring module + dev wired; ALB uses /ready, container /health)

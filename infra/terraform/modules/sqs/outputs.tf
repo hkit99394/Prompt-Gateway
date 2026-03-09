@@ -16,6 +16,11 @@ output "dlq_url" {
   value       = aws_sqs_queue.dlq.url
 }
 
+output "dlq_name" {
+  description = "Dead-letter queue name (for CloudWatch alarm dimension)"
+  value       = aws_sqs_queue.dlq.name
+}
+
 output "dispatch_queue_arn" {
   description = "Dispatch queue ARN"
   value       = aws_sqs_queue.dispatch.arn
