@@ -170,5 +170,4 @@ fi
 echo ""
 echo "=== Phase 3 complete. ==="
 echo ""
-echo "Next: Phase 4 (Smoke tests) - curl /health, /ready, POST /jobs, etc. See docs/DEPLOYMENT_PLAN.md T-5.4"
-echo "  Or run: ./scripts/smoke-test.sh <BASE_URL> <API_KEY>"
+echo "Next: Phase 4 (Smoke tests) - run ./scripts/first-deploy-phase4.sh (see docs/DEPLOYMENT_PLAN.md T-5.4)"
