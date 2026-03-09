@@ -155,6 +155,7 @@ resource "aws_iam_role_policy" "control_plane_dynamodb" {
       {
         Effect = "Allow"
         Action = [
+          "dynamodb:DescribeTable",
           "dynamodb:GetItem",
           "dynamodb:PutItem",
           "dynamodb:UpdateItem",

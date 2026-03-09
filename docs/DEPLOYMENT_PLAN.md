@@ -242,6 +242,8 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | 4.4 | T-5.4.4 | `GET /jobs/{job_id}` → job status |
 | 4.5 | T-5.4.5 | Wait for job completion, `GET /jobs/{job_id}/result` → 200 |
 
+**Automation:** Run `./scripts/first-deploy-phase4.sh` to execute T-5.4.1 – T-5.4.5. Uses `scripts/smoke-test.sh`; resolves BASE_URL from the environment’s ALB (or set `BASE_URL` / `HEALTH_CHECK_BASE_URL`) and API key from SSM (dev) or Secrets Manager (staging/prod). Optional env vars: `ENV`, `BASE_URL`, `API_KEY`, `AWS_REGION`. Use `--insecure` for HTTPS with self-signed or ALB hostname when not using a custom domain. Requires Phase 1–3 complete and `jq` installed.
+
 ---
 
 ## 6. Secrets & Configuration – Detailed Tasks
@@ -258,6 +260,32 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | T-6.8 | Wire ECS task definition `secrets` block to Secrets Manager ARNs |
 | T-6.9 | Wire `environment` or `secrets` for SSM params (or use custom entrypoint to fetch at startup) |
 | T-6.10 | Document required env vars: `ApiSecurity__ApiKeys__0` (or `ApiSecurity__ApiKey` as single key/JSON array), `ProviderWorker__OpenAi__ApiKey`, etc. |
+
+### Implementation notes
+
+- **T-6.1, T-6.2:** Implemented by `scripts/first-deploy-phase2.sh` (Phase 2). **Dev:** API keys and OpenAI key are stored in SSM Parameter Store (SecureString) at `/prompt-gateway/{env}/api-keys` and `/prompt-gateway/{env}/openai-api-key` to avoid Secrets Manager per-secret cost. **Staging/prod:** Secrets Manager secrets `prompt-gateway/{env}/api-keys` and `prompt-gateway/{env}/openai-api-key` are created/updated. Optional env vars for the script: `API_KEYS_JSON`, `OPENAI_API_KEY`; if unset and Bitwarden CLI is unlocked, the script can generate and store a key.
+- **T-6.3 – T-6.7:** Phase 2 creates SSM parameters under `/prompt-gateway/{env}/`: `dynamodb-table-name`, `dynamodb-gsi-name`, `dispatch-queue-url`, `result-queue-url`, `prompts-bucket`, `results-bucket`. These are used by scripts (e.g. Phase 4 smoke test) and operators. ECS task definitions **do not** read these SSM params for queue/table config; Terraform passes queue URLs and table names from module outputs into the task definition `environment` block.
+- **T-6.8:** ECS task definitions in `infra/terraform/modules/ecs-service/main.tf` use a `secrets` block. Control Plane: `ApiSecurity__ApiKey` from Secrets Manager (staging/prod) or from SSM parameter ARN (dev). Provider Worker: `ProviderWorker__OpenAi__ApiKey` from the same source. IAM execution roles have `secretsmanager:GetSecretValue` and (for dev) SSM `GetParameter` on the relevant ARNs.
+- **T-6.9:** Task definition `environment` block sets `AwsQueue__DispatchQueueUrl`, `AwsQueue__ResultQueueUrl`, `AwsStorage__TableName`, `AwsStorage__JobListIndexName` from Terraform variables (module outputs). Secrets are injected via `valueFrom` (Secrets Manager or SSM). No custom entrypoint is required.
+
+### T-6.10: Required environment variables and secrets
+
+| Component | Name | Type | Description |
+|-----------|------|------|-------------|
+| **Control Plane API** | `ApiSecurity__ApiKey` | Secret | JSON array of API keys, e.g. `["key1","key2"]`. In ECS: from Secrets Manager or SSM (dev). At least one key required. |
+| | `AwsQueue__DispatchQueueUrl` | Env | SQS dispatch queue URL (from Terraform). |
+| | `AwsQueue__ResultQueueUrl` | Env | SQS result queue URL (from Terraform). |
+| | `AwsStorage__TableName` | Env | DynamoDB table name (from Terraform). |
+| | `AwsStorage__JobListIndexName` | Env | GSI name, e.g. `JobListIndex` (from Terraform). |
+| | `AwsStorage__*` (optional) | Env | `DeduplicationTtlDays`, `OutboxTerminalTtlDays`, `EventTtlDays`, `ResultTtlDays` – have defaults. |
+| **Provider Worker** | `ProviderWorker__OpenAi__ApiKey` | Secret | OpenAI API key. In ECS: from Secrets Manager or SSM (dev). |
+| | `ProviderWorker__InputQueueUrl` | Env | SQS dispatch queue URL (from Terraform). |
+| | `ProviderWorker__OutputQueueUrl` | Env | SQS result queue URL (from Terraform). |
+| | `ProviderWorker__DedupeTableName` | Env | DynamoDB dedupe table name (from Terraform). |
+| | `ProviderWorker__PromptBucket` | Env | (Optional) S3 prompts bucket name. |
+| | `ProviderWorker__ResultBucket` | Env | (Optional) S3 results bucket name. |
+
+**Client authentication:** Send `X-API-Key: <key>` on requests to protected Control Plane endpoints. Keys are validated against the configured `ApiSecurity__ApiKey` value (JSON array or single key).
 
 ---
 
@@ -324,6 +352,30 @@ ENV=dev ./scripts/first-deploy-phase3.sh
 
 If health checks still fail after curl is added, check CloudWatch Logs for the task: the app may be crashing on startup (e.g. missing config or AWS dependency). Increase the task definition’s health check `startPeriod` (e.g. to 90s) if the app needs longer to start.
 
+### /ready returns 503
+
+**Meaning:** The readiness endpoint runs the **AWS dependencies** health check (DynamoDB table + SQS dispatch and result queues). A 503 means that check is unhealthy.
+
+**How to see the reason:**
+
+1. **Response body** – The API returns a JSON body describing the failure. Run:
+   ```bash
+   curl -s -H "X-API-Key: YOUR_API_KEY" "http://<ALB_DNS>/ready"
+   ```
+   Or re-run the smoke test; it now prints the response body when `/ready` fails.
+
+2. **Typical causes:**
+   - **Missing or wrong env in the running task** – The Control Plane API task must have `AwsStorage__TableName`, `AwsQueue__DispatchQueueUrl`, and `AwsQueue__ResultQueueUrl` set (from Terraform when the task definition was created). If you only updated the task definition image/secrets in CD or Phase 3 and the **revision** you’re running was registered without these env vars, they will be missing. **Fix:** Redeploy using a task definition that includes the environment block (e.g. run `terraform apply` for the ECS module, then update the service to use the Terraform-managed task definition, or re-register a new revision that includes these env vars).
+   - **IAM** – The task role needs permission to `dynamodb:DescribeTable` and `sqs:GetQueueAttributes` on the table and both queues. Check the IAM module and task role.
+   - **Wrong URLs/table name** – Verify the task’s env values match the Terraform outputs (e.g. `terraform output -json` in the dev environment).
+
+3. **Check the live task definition:**
+   ```bash
+   aws ecs describe-task-definition --task-definition prompt-gateway-dev-control-plane-api \
+     --query 'taskDefinition.containerDefinitions[0].environment'
+   ```
+   Ensure `AwsQueue__DispatchQueueUrl`, `AwsQueue__ResultQueueUrl`, and `AwsStorage__TableName` are present and correct.
+
 ---
 
 ## 10. Master Task Checklist
@@ -351,10 +403,10 @@ If health checks still fail after curl is added, check CloudWatch Logs for the t
 - [x] T-5.1.1 – T-5.1.8: Phase 1 – Infrastructure (script: `scripts/first-deploy-phase1.sh`)
 - [x] T-5.2.1 – T-5.2.4: Phase 2 – Config & secrets
 - [x] T-5.3.1 – T-5.3.6: Phase 3 – Application deploy (script: `scripts/first-deploy-phase3.sh`)
-- [ ] T-5.4.1 – T-5.4.5: Phase 4 – Smoke tests
+- [x] T-5.4.1 – T-5.4.5: Phase 4 – Smoke tests (script: `scripts/first-deploy-phase4.sh`)
 
 ### Secrets & config
-- [ ] T-6.1 – T-6.10
+- [x] T-6.1 – T-6.10 (Phase 2 script + Terraform ECS module; see §6 implementation notes and T-6.10 table)
 
 ### Smoke test script
 - [x] T-7.1 – T-7.9

@@ -13,17 +13,20 @@ public sealed class AwsDependenciesHealthCheck : IHealthCheck
     private readonly IAmazonSQS _sqs;
     private readonly AwsQueueOptions _queueOptions;
     private readonly DynamoDbOptions _dynamoOptions;
+    private readonly ILogger<AwsDependenciesHealthCheck> _logger;
 
     public AwsDependenciesHealthCheck(
         IAmazonDynamoDB dynamoDb,
         IAmazonSQS sqs,
         AwsQueueOptions queueOptions,
-        DynamoDbOptions dynamoOptions)
+        DynamoDbOptions dynamoOptions,
+        ILogger<AwsDependenciesHealthCheck> logger)
     {
         _dynamoDb = dynamoDb;
         _sqs = sqs;
         _queueOptions = queueOptions;
         _dynamoOptions = dynamoOptions;
+        _logger = logger;
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(
@@ -71,6 +74,8 @@ public sealed class AwsDependenciesHealthCheck : IHealthCheck
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "AWS dependency check failed. TableName={TableName}, DispatchQueueUrl={DispatchUrl}, ResultQueueUrl={ResultUrl}",
+                _dynamoOptions.TableName, _queueOptions.DispatchQueueUrl, _queueOptions.ResultQueueUrl);
             return HealthCheckResult.Unhealthy("AWS dependency check failed.", ex);
         }
     }

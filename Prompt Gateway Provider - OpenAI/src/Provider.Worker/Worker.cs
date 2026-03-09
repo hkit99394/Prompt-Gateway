@@ -140,6 +140,11 @@ public class Worker : BackgroundService
         try
         {
             job = JsonSerializer.Deserialize<CanonicalJobRequest>(message.Body, _jsonOptions);
+            // Control Plane may send DispatchMessage (camelCase) with jobId, attemptId, request nested
+            if (job is null || string.IsNullOrWhiteSpace(job.JobId) || string.IsNullOrWhiteSpace(job.AttemptId))
+            {
+                job = TryParseDispatchMessageFormat(message.Body);
+            }
         }
         catch (Exception ex)
         {
@@ -150,7 +155,8 @@ public class Worker : BackgroundService
 
         if (job is null || string.IsNullOrWhiteSpace(job.JobId) || string.IsNullOrWhiteSpace(job.AttemptId))
         {
-            _logger.LogWarning("Invalid job payload. Deleting message.");
+            _logger.LogWarning("Invalid job payload. Deleting message. Body (truncated): {Body}",
+                message.Body.Length > 500 ? message.Body[..500] + "..." : message.Body);
             await DeleteMessageAsync(message, stoppingToken);
             return;
         }
@@ -342,6 +348,58 @@ public class Worker : BackgroundService
         {
             _logger.LogError(ex, "Failed to publish error result.");
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Fallback for Control Plane sending camelCase DispatchMessage: { "jobId", "attemptId", "request": { "taskType", ... } }.
+    /// </summary>
+    private static CanonicalJobRequest? TryParseDispatchMessageFormat(string body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("jobId", out var jobIdEl) || !root.TryGetProperty("attemptId", out var attemptIdEl))
+                return null;
+            var jobId = jobIdEl.GetString();
+            var attemptId = attemptIdEl.GetString();
+            if (string.IsNullOrWhiteSpace(jobId) || string.IsNullOrWhiteSpace(attemptId))
+                return null;
+
+            var taskType = string.Empty;
+            string? model = null;
+            Dictionary<string, string>? metadata = null;
+            if (root.TryGetProperty("request", out var requestEl))
+            {
+                if (requestEl.TryGetProperty("taskType", out var tt))
+                    taskType = tt.GetString() ?? string.Empty;
+                if (requestEl.TryGetProperty("model", out var m))
+                    model = m.GetString();
+                if (requestEl.TryGetProperty("metadata", out var metaEl) && metaEl.ValueKind == JsonValueKind.Object)
+                {
+                    metadata = new Dictionary<string, string>();
+                    foreach (var p in metaEl.EnumerateObject())
+                        if (p.Value.ValueKind == JsonValueKind.String)
+                            metadata[p.Name] = p.Value.GetString() ?? string.Empty;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(model) && root.TryGetProperty("model", out var modelEl))
+                model = modelEl.GetString();
+
+            return new CanonicalJobRequest
+            {
+                JobId = jobId,
+                AttemptId = attemptId,
+                TaskType = string.IsNullOrWhiteSpace(taskType) ? CanonicalTaskTypes.ChatCompletion : taskType,
+                Model = model,
+                Metadata = metadata
+            };
+        }
+        catch
+        {
+            return null;
         }
     }
 

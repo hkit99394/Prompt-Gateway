@@ -36,11 +36,17 @@ if [ "$HTTP_CODE" != "200" ]; then
 fi
 echo "  OK: /health -> 200"
 
-# T-7.4: GET /ready
+# T-7.4: GET /ready (includes AWS dependency check: DynamoDB, SQS)
 echo "  GET /ready..."
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/ready" || true)
+READY_RESPONSE=$(curl -s -w "\n%{http_code}" "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/ready" || true)
+READY_BODY=$(echo "$READY_RESPONSE" | sed '$d')
+HTTP_CODE=$(echo "$READY_RESPONSE" | tail -n 1)
 if [ "$HTTP_CODE" != "200" ]; then
   echo "  FAIL: /ready returned $HTTP_CODE (expected 200)"
+  if [ -n "$READY_BODY" ]; then
+    echo "  Response body (reason): $READY_BODY"
+  fi
+  echo "  Tip: /ready fails if AwsStorage__TableName, AwsQueue__DispatchQueueUrl, or AwsQueue__ResultQueueUrl are missing or unreachable. Check ECS task definition env and IAM."
   exit 1
 fi
 echo "  OK: /ready -> 200"
@@ -56,7 +62,7 @@ RESPONSE=$(curl -w "\n%{http_code}" "${CURL_OPTS_NOFAIL[@]}" \
   -H "X-API-Key: $API_KEY" \
   -d '{"taskType":"chat_completion"}' \
   "$BASE_URL/jobs")
-BODY=$(echo "$RESPONSE" | head -n -1)
+BODY=$(echo "$RESPONSE" | sed '$d')
 HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
 
 # Accept 200 (Ok) or 201 (Created) per REST conventions for resource creation

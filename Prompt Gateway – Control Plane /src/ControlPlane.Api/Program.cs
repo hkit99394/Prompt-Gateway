@@ -88,6 +88,17 @@ builder.Services.AddSingleton(outboxOptions);
 builder.Services.AddSingleton<JobOrchestrator>();
 builder.Services.AddSingleton<DispatchOutboxProcessor>();
 builder.Services.AddHostedService<OutboxWorker>();
+
+var resultQueueOptions = new ResultQueueWorkerOptions
+{
+    IdleDelay = TimeSpan.FromSeconds(
+        double.TryParse(builder.Configuration["ResultQueue:IdleDelaySeconds"], out var rqIdle) ? rqIdle : 1),
+    ErrorDelay = TimeSpan.FromSeconds(
+        double.TryParse(builder.Configuration["ResultQueue:ErrorDelaySeconds"], out var rqErr) ? rqErr : 2)
+};
+builder.Services.AddSingleton(resultQueueOptions);
+builder.Services.AddSingleton<ResultQueueProcessor>();
+builder.Services.AddHostedService<ResultQueueWorker>();
 builder.Services.AddHealthChecks()
     .AddCheck("live", () => HealthCheckResult.Healthy(), tags: new[] { "live" })
     .AddCheck<AwsDependenciesHealthCheck>("aws_dependencies", tags: new[] { "ready" });
@@ -110,7 +121,23 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 });
 app.MapHealthChecks("/ready", new HealthCheckOptions
 {
-    Predicate = registration => registration.Tags.Contains("ready")
+    Predicate = registration => registration.Tags.Contains("ready"),
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var result = new
+        {
+            status = report.Status.ToString(),
+            entries = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description,
+                exception = e.Value.Exception?.Message
+            })
+        };
+        await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(result));
+    }
 });
 
 app.Run();

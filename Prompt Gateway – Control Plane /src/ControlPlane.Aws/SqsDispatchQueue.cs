@@ -9,9 +9,11 @@ public sealed class SqsDispatchQueue : IDispatchQueue
 {
     private readonly IAmazonSQS _sqs;
     private readonly AwsQueueOptions _options;
-    private readonly JsonSerializerOptions _serializerOptions = new()
+
+    /// <summary>Snake_case so the Provider Worker can deserialize (expects job_id, attempt_id, task_type, etc.).</summary>
+    private static readonly JsonSerializerOptions SnakeCaseOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = new SnakeCaseNamingPolicy()
     };
 
     public SqsDispatchQueue(IAmazonSQS sqs, AwsQueueOptions options)
@@ -27,7 +29,8 @@ public sealed class SqsDispatchQueue : IDispatchQueue
             throw new InvalidOperationException("DispatchQueueUrl is not configured.");
         }
 
-        var body = JsonSerializer.Serialize(message, _serializerOptions);
+        // Worker expects CanonicalJobRequest with snake_case (job_id, attempt_id, task_type). Send message.Request, not the full DispatchMessage.
+        var body = JsonSerializer.Serialize(message.Request, SnakeCaseOptions);
         var request = new SendMessageRequest
         {
             QueueUrl = _options.DispatchQueueUrl,
