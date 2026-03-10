@@ -71,6 +71,52 @@ public class PromptTemplateStoreTests
     }
 
     [Test]
+    public async Task GetTemplateAsync_UsesInputRefAsPromptKey()
+    {
+        var store = Substitute.For<IObjectStore>();
+        var options = TestOptions.Create(new ProviderWorkerOptions
+        {
+            PromptBucket = "bucket"
+        });
+        var templateStore = new PromptTemplateStore(store, options);
+
+        var job = new CanonicalJobRequest
+        {
+            InputRef = "prompts/from-input-ref.txt"
+        };
+
+        store.GetObjectTextAsync("bucket", "prompts/from-input-ref.txt", Arg.Any<CancellationToken>())
+            .Returns("input-ref prompt");
+
+        var result = await templateStore.GetTemplateAsync(job, CancellationToken.None);
+
+        Assert.That(result, Is.EqualTo("input-ref prompt"));
+    }
+
+    [Test]
+    public async Task GetTemplateAsync_ParsesS3InputRef()
+    {
+        var store = Substitute.For<IObjectStore>();
+        var options = TestOptions.Create(new ProviderWorkerOptions
+        {
+            PromptBucket = "bucket-a"
+        });
+        var templateStore = new PromptTemplateStore(store, options);
+
+        var job = new CanonicalJobRequest
+        {
+            InputRef = "s3://bucket-a/prompts/job.txt"
+        };
+
+        store.GetObjectTextAsync("bucket-a", "prompts/job.txt", Arg.Any<CancellationToken>())
+            .Returns("s3 input-ref prompt");
+
+        var result = await templateStore.GetTemplateAsync(job, CancellationToken.None);
+
+        Assert.That(result, Is.EqualTo("s3 input-ref prompt"));
+    }
+
+    [Test]
     public void GetTemplateAsync_ThrowsWhenBucketOverrideIsNotAllowed()
     {
         var store = Substitute.For<IObjectStore>();

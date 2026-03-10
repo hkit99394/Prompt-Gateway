@@ -25,6 +25,10 @@
 ## Request contract
 
 - Header: `X-API-Key`
+- `POST /jobs` for `taskType=chat_completion` requires at least one prompt reference field:
+  - `inputRef` (legacy-compatible, mapped to worker prompt key)
+  - `promptKey`
+  - `promptS3Key`
 - Protected endpoints:
   - `POST /jobs`
   - `POST /jobs/{jobId}/resume`
@@ -52,14 +56,14 @@ curl -i \
   -X POST \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $CONTROL_PLANE_API_KEY" \
-  -d '{"taskType":"chat_completion"}' \
+  -d '{"taskType":"chat_completion","inputRef":"prompts/job-123.txt"}' \
   "http://localhost:5000/jobs"
 ```
 
 ## Expected response codes
 
 - `200`: request accepted or read operation succeeded
-- `400`: invalid request payload (for example missing `taskType`)
+- `400`: invalid request payload (for example missing `taskType` or prompt reference for `chat_completion`)
 - `401`: missing/invalid `X-API-Key`
 - `409`: orchestration state conflict (for example concurrent update conflict)
 

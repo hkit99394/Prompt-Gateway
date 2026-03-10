@@ -79,6 +79,19 @@ public class ApiSecurityTests
     }
 
     [Test]
+    public async Task CreateJob_MissingPromptReference_ReturnsBadRequest()
+    {
+        await using var factory = new ControlPlaneApiFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(ApiKeyAuthenticationHandler.HeaderName, ControlPlaneApiFactory.ValidApiKey);
+
+        using var content = new StringContent("""{"taskType":"chat_completion"}""", Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/jobs", content);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+    [Test]
     public async Task ListJobs_LimitGreaterThanMaximum_ClampsToMaximum()
     {
         await using var factory = new ControlPlaneApiFactory();

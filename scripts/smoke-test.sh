@@ -8,6 +8,8 @@
 #   BASE_URL  - Base URL (e.g. http://alb-dns or https://api.example.com)
 #   API_KEY   - X-API-Key value for authentication
 #   --insecure - Optional: skip SSL cert verification (curl -k) for HTTPS URLs
+ # Env:
+#   SMOKE_INPUT_REF - Optional prompt reference key (default: prompts/smoke-test.txt)
 #
 # Exits 0 on success, 1 on failure.
 
@@ -20,6 +22,7 @@ fi
 
 BASE_URL="${1%/}"
 API_KEY="$2"
+INPUT_REF="${SMOKE_INPUT_REF:-prompts/smoke-test.txt}"
 CURL_OPTS=(-sf)
 if [ "${3:-}" = "--insecure" ]; then
   CURL_OPTS=(-skf)
@@ -60,7 +63,7 @@ RESPONSE=$(curl -w "\n%{http_code}" "${CURL_OPTS_NOFAIL[@]}" \
   -X POST \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d '{"taskType":"chat_completion"}' \
+  -d "{\"taskType\":\"chat_completion\",\"inputRef\":\"$INPUT_REF\"}" \
   "$BASE_URL/jobs")
 BODY=$(echo "$RESPONSE" | sed '$d')
 HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)

@@ -72,19 +72,55 @@ fi
 
 # T-5.1.5 – T-5.1.8: Verification
 echo "=== Verification (T-5.1.5 – T-5.1.8) ==="
-REGION="${AWS_REGION:-us-east-1}"
+tf_output_raw() {
+  terraform output -raw "$1" 2>/dev/null || true
+}
+
+REGION="$(tf_output_raw aws_region)"
+[ -z "$REGION" ] && REGION="${AWS_REGION:-us-east-1}"
+
+TF_ENV="$(tf_output_raw environment_name)"
+[ -z "$TF_ENV" ] && TF_ENV="$ENV"
+
+TABLE="$(tf_output_raw dynamodb_table_name)"
+[ -z "$TABLE" ] && TABLE="prompt-gateway-${TF_ENV}"
+
+GSI_NAME="$(tf_output_raw dynamodb_gsi_name)"
+[ -z "$GSI_NAME" ] && GSI_NAME="JobListIndex"
+
+DISPATCH_URL_OUT="$(tf_output_raw dispatch_queue_url)"
+RESULT_URL_OUT="$(tf_output_raw result_queue_url)"
+DLQ_URL_OUT="$(tf_output_raw dlq_url)"
+
+PROMPTS_BUCKET_OUT="$(tf_output_raw prompts_bucket_name)"
+RESULTS_BUCKET_OUT="$(tf_output_raw results_bucket_name)"
+
+CLUSTER_NAME_OUT="$(tf_output_raw ecs_cluster_name)"
+[ -z "$CLUSTER_NAME_OUT" ] && CLUSTER_NAME_OUT="prompt-gateway-${TF_ENV}"
+
+ECR_API_REPO_URL_OUT="$(tf_output_raw ecr_api_repo_url)"
+ECR_WORKER_REPO_URL_OUT="$(tf_output_raw ecr_worker_repo_url)"
+if [ -n "$ECR_API_REPO_URL_OUT" ]; then
+  ECR_API_REPO_OUT="$(basename "$ECR_API_REPO_URL_OUT")"
+else
+  ECR_API_REPO_OUT="prompt-gateway-${TF_ENV}-control-plane-api"
+fi
+if [ -n "$ECR_WORKER_REPO_URL_OUT" ]; then
+  ECR_WORKER_REPO_OUT="$(basename "$ECR_WORKER_REPO_URL_OUT")"
+else
+  ECR_WORKER_REPO_OUT="prompt-gateway-${TF_ENV}-provider-worker"
+fi
 
 # T-5.1.5: DynamoDB table exists, GSI present, TTL enabled
 echo "T-5.1.5: Verify DynamoDB table..."
-TABLE="prompt-gateway-dev"
 DESC=$(aws dynamodb describe-table --table-name "$TABLE" --region "$REGION" 2>/dev/null || true)
 if [ -z "$DESC" ]; then
-  echo "  FAIL: DynamoDB table $TABLE not found"
+  echo "  FAIL: DynamoDB table $TABLE not found (region=$REGION)"
   exit 1
 fi
-GSI=$(echo "$DESC" | jq -r '.Table.GlobalSecondaryIndexes[]? | select(.IndexName=="JobListIndex") | .IndexName' 2>/dev/null || true)
-if [ "$GSI" != "JobListIndex" ]; then
-  echo "  FAIL: GSI JobListIndex not found"
+GSI=$(echo "$DESC" | jq -r --arg gsi "$GSI_NAME" '.Table.GlobalSecondaryIndexes[]? | select(.IndexName==$gsi) | .IndexName' 2>/dev/null || true)
+if [ "$GSI" != "$GSI_NAME" ]; then
+  echo "  FAIL: GSI $GSI_NAME not found"
   exit 1
 fi
 # TTL is returned by describe-time-to-live, not describe-table
@@ -94,26 +130,36 @@ if [ "$TTL" != "ENABLED" ]; then
   echo "  FAIL: TTL not enabled (status: $TTL)"
   exit 1
 fi
-echo "  OK: DynamoDB table $TABLE, GSI JobListIndex, TTL enabled"
+echo "  OK: DynamoDB table $TABLE, GSI $GSI_NAME, TTL enabled"
 echo ""
 
 # T-5.1.6: SQS queues exist, DLQ configured
 echo "T-5.1.6: Verify SQS queues..."
-for Q in "prompt-gateway-dev-dispatch" "prompt-gateway-dev-result" "prompt-gateway-dev-dlq"; do
-  URL=$(aws sqs get-queue-url --queue-name "$Q" --region "$REGION" 2>/dev/null | jq -r '.QueueUrl // empty')
-  if [ -z "$URL" ]; then
-    echo "  FAIL: Queue $Q not found"
-    exit 1
-  fi
-  echo "  OK: $Q"
-done
+if [ -n "$DISPATCH_URL_OUT" ] && [ -n "$RESULT_URL_OUT" ] && [ -n "$DLQ_URL_OUT" ]; then
+  for URL in "$DISPATCH_URL_OUT" "$RESULT_URL_OUT" "$DLQ_URL_OUT"; do
+    if ! aws sqs get-queue-attributes --queue-url "$URL" --attribute-names QueueArn --region "$REGION" >/dev/null 2>&1; then
+      echo "  FAIL: Queue URL not found/reachable: $URL"
+      exit 1
+    fi
+    echo "  OK: $(basename "$URL")"
+  done
+else
+  for Q in "prompt-gateway-${TF_ENV}-dispatch" "prompt-gateway-${TF_ENV}-result" "prompt-gateway-${TF_ENV}-dlq"; do
+    URL=$(aws sqs get-queue-url --queue-name "$Q" --region "$REGION" 2>/dev/null | jq -r '.QueueUrl // empty')
+    if [ -z "$URL" ]; then
+      echo "  FAIL: Queue $Q not found"
+      exit 1
+    fi
+    echo "  OK: $Q"
+  done
+fi
 echo ""
 
 # T-5.1.7: S3 buckets exist
 echo "T-5.1.7: Verify S3 buckets..."
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
-PROMPTS="prompt-gateway-dev-prompts-${ACCOUNT}"
-RESULTS="prompt-gateway-dev-results-${ACCOUNT}"
+PROMPTS="${PROMPTS_BUCKET_OUT:-prompt-gateway-${TF_ENV}-prompts-${ACCOUNT}}"
+RESULTS="${RESULTS_BUCKET_OUT:-prompt-gateway-${TF_ENV}-results-${ACCOUNT}}"
 for B in "$PROMPTS" "$RESULTS"; do
   if ! aws s3api head-bucket --bucket "$B" 2>/dev/null; then
     echo "  FAIL: Bucket $B not found"
@@ -127,7 +173,7 @@ echo ""
 # Note: describe-repositories can return exit 0 with empty list in some cases;
 # we explicitly verify the repository exists by checking the response content.
 echo "T-5.1.8: Verify ECR repos and ECS cluster..."
-for R in "prompt-gateway-dev-control-plane-api" "prompt-gateway-dev-provider-worker"; do
+for R in "$ECR_API_REPO_OUT" "$ECR_WORKER_REPO_OUT"; do
   REPO_NAME=$(aws ecr describe-repositories --repository-names "$R" --region "$REGION" 2>/dev/null | jq -r '.repositories[0].repositoryName // ""') || REPO_NAME=""
   if [ -z "$REPO_NAME" ] || [ "$REPO_NAME" != "$R" ]; then
     echo "  FAIL: ECR repo $R not found"
@@ -135,11 +181,11 @@ for R in "prompt-gateway-dev-control-plane-api" "prompt-gateway-dev-provider-wor
   fi
   echo "  OK: ECR $R"
 done
-if ! aws ecs describe-clusters --clusters "prompt-gateway-dev" --region "$REGION" 2>/dev/null | jq -e '.clusters[0].clusterName == "prompt-gateway-dev"' >/dev/null 2>&1; then
-  echo "  FAIL: ECS cluster prompt-gateway-dev not found"
+if ! aws ecs describe-clusters --clusters "$CLUSTER_NAME_OUT" --region "$REGION" 2>/dev/null | jq -e --arg c "$CLUSTER_NAME_OUT" '.clusters[0].clusterName == $c' >/dev/null 2>&1; then
+  echo "  FAIL: ECS cluster $CLUSTER_NAME_OUT not found"
   exit 1
 fi
-echo "  OK: ECS cluster prompt-gateway-dev"
+echo "  OK: ECS cluster $CLUSTER_NAME_OUT"
 echo ""
 
 echo "=== Phase 1 complete. All verifications passed. ==="

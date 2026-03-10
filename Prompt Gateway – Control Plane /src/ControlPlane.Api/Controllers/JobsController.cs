@@ -29,6 +29,12 @@ public sealed class JobsController : ControllerBase
             return BadRequest(new { error = "taskType is required" });
         }
 
+        if (string.Equals(request.TaskType, "chat_completion", StringComparison.OrdinalIgnoreCase)
+            && !request.HasPromptReference())
+        {
+            return BadRequest(new { error = "prompt reference is required (inputRef, promptKey, or promptS3Key)" });
+        }
+
         try
         {
             var handle = await _orchestrator.AcceptAsync(request, cancellationToken);

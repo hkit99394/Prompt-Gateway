@@ -65,7 +65,9 @@ Normalized error fields with optional provider error code.
 
 ### CanonicalJobRequest
 Canonical job input plus optional IDs and metadata. `WithIds` creates
-an immutable copy with generated IDs.
+an immutable copy with generated IDs. For `chat_completion`, include at least
+one prompt reference (`inputRef`, `promptKey`, or `promptS3Key`) so provider
+workers can load prompt templates.
 
 ### JobHandle
 Return type for intake: job ID, attempt ID, trace ID.

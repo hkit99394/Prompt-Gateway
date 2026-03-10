@@ -369,11 +369,26 @@ public class Worker : BackgroundService
 
             var taskType = string.Empty;
             string? model = null;
+            string? inputRef = null;
+            string? promptKey = null;
+            string? promptBucket = null;
+            string? promptS3Key = null;
+            string? promptS3Bucket = null;
             Dictionary<string, string>? metadata = null;
             if (root.TryGetProperty("request", out var requestEl))
             {
                 if (requestEl.TryGetProperty("taskType", out var tt))
                     taskType = tt.GetString() ?? string.Empty;
+                if (requestEl.TryGetProperty("inputRef", out var inputRefEl))
+                    inputRef = inputRefEl.GetString();
+                if (requestEl.TryGetProperty("promptKey", out var promptKeyEl))
+                    promptKey = promptKeyEl.GetString();
+                if (requestEl.TryGetProperty("promptBucket", out var promptBucketEl))
+                    promptBucket = promptBucketEl.GetString();
+                if (requestEl.TryGetProperty("promptS3Key", out var promptS3KeyEl))
+                    promptS3Key = promptS3KeyEl.GetString();
+                if (requestEl.TryGetProperty("promptS3Bucket", out var promptS3BucketEl))
+                    promptS3Bucket = promptS3BucketEl.GetString();
                 if (requestEl.TryGetProperty("model", out var m))
                     model = m.GetString();
                 if (requestEl.TryGetProperty("metadata", out var metaEl) && metaEl.ValueKind == JsonValueKind.Object)
@@ -393,6 +408,11 @@ public class Worker : BackgroundService
                 JobId = jobId,
                 AttemptId = attemptId,
                 TaskType = string.IsNullOrWhiteSpace(taskType) ? CanonicalTaskTypes.ChatCompletion : taskType,
+                InputRef = inputRef,
+                PromptKey = promptKey,
+                PromptBucket = promptBucket,
+                PromptS3Key = promptS3Key,
+                PromptS3Bucket = promptS3Bucket,
                 Model = model,
                 Metadata = metadata
             };

@@ -18,6 +18,9 @@ public class CanonicalJobRequest
     [JsonPropertyName("task_type")]
     public string TaskType { get; set; } = string.Empty;
 
+    [JsonPropertyName("input_ref")]
+    public string? InputRef { get; set; }
+
     [JsonPropertyName("prompt_key")]
     public string? PromptKey { get; set; }
 
