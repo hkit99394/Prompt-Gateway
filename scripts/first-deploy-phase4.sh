@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # First-deploy Phase 4: Smoke tests (T-5.4.1 – T-5.4.5)
 # Runs health, ready, POST /jobs, poll job status, GET result via scripts/smoke-test.sh.
+# This works after either ECS processing mode or Lambda processing mode is deployed.
 #
 # Prerequisites:
-#   - Phase 1, 2, and 3 complete (infra up, secrets in place, ECS services running)
+#   - Phase 1 and 2 complete
+#   - Phase 3 complete for ECS mode, or Phase 3/5 complete for Lambda mode
 #   - AWS credentials configured
 #   - jq installed
 #

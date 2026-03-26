@@ -230,7 +230,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | 3.5 | T-5.3.5 | Deploy Provider Worker service |
 | 3.6 | T-5.3.6 | Verify tasks are running (ECS console or CLI) |
 
-**Automation:** Run `./scripts/first-deploy-phase3.sh` to execute T-5.3.1 – T-5.3.6. Requires Phase 1 and Phase 2 complete, Docker and `jq` installed. Optional env vars: `ENV` (dev | staging | prod), `IMAGE_TAG` (default: latest), `AWS_REGION` (default: us-east-1). Use `--build-only` to only build and push images without updating ECS; use `--skip-verify` to skip waiting for services to stabilize.
+**Automation:** Run `./scripts/first-deploy-phase3.sh --processing-mode ecs|lambda` to execute Phase 3 for the selected runtime. `ecs` keeps queue processing on ECS and turns Lambda processing off. `lambda` packages and enables Lambda processing while scaling ECS queue workers down. Requires Phase 1 and Phase 2 complete, Docker and `jq` installed. Optional env vars: `ENV` (dev | staging | prod), `IMAGE_TAG` (default: latest), `AWS_REGION` (default: us-east-1). Use `--build-only` to only build and push images without deploying; use `--skip-verify` to skip the final runtime verification.
 
 ### Phase 4: Smoke tests
 
@@ -242,7 +242,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | 4.4 | T-5.4.4 | `GET /jobs/{job_id}` → job status |
 | 4.5 | T-5.4.5 | Wait for job completion, `GET /jobs/{job_id}/result` → 200 |
 
-**Automation:** Run `./scripts/first-deploy-phase4.sh` to execute T-5.4.1 – T-5.4.5. Uses `scripts/smoke-test.sh`; resolves BASE_URL from the environment’s ALB (or set `BASE_URL` / `HEALTH_CHECK_BASE_URL`) and API key from SSM (dev) or Secrets Manager (staging/prod). Optional env vars: `ENV`, `BASE_URL`, `API_KEY`, `AWS_REGION`. Use `--insecure` for HTTPS with self-signed or ALB hostname when not using a custom domain. Requires Phase 1–3 complete and `jq` installed.
+**Automation:** Run `./scripts/first-deploy-phase4.sh` to execute T-5.4.1 – T-5.4.5 after either ECS mode or Lambda mode is deployed. Uses `scripts/smoke-test.sh`; resolves BASE_URL from the environment’s ALB (or set `BASE_URL` / `HEALTH_CHECK_BASE_URL`) and API key from SSM (dev) or Secrets Manager (staging/prod). Optional env vars: `ENV`, `BASE_URL`, `API_KEY`, `AWS_REGION`. Use `--insecure` for HTTPS with self-signed or ALB hostname when not using a custom domain. Requires Phase 1–3 complete and `jq` installed.
 
 ---
 
@@ -391,7 +391,7 @@ After this, the active task definition will use SSM (`/prompt-gateway/dev/api-ke
 **Fix:** The Control Plane API Dockerfile installs `curl` in the final stage so the health check succeeds. Rebuild and push the image, then force a new deployment:
 
 ```bash
-ENV=dev ./scripts/first-deploy-phase3.sh
+ENV=dev ./scripts/first-deploy-phase3.sh --processing-mode ecs
 ```
 
 If health checks still fail after curl is added, check CloudWatch Logs for the task: the app may be crashing on startup (e.g. missing config or AWS dependency). Increase the task definition’s health check `startPeriod` (e.g. to 90s) if the app needs longer to start.

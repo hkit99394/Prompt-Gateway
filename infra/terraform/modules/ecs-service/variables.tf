@@ -135,6 +135,12 @@ variable "disable_api_hosted_workers" {
   default     = false
 }
 
+variable "disable_provider_worker_service" {
+  description = "Scale the ECS provider worker service to zero when Lambda processing is active"
+  type        = bool
+  default     = false
+}
+
 variable "certificate_arn" {
   description = "ACM certificate ARN for HTTPS listener (optional; when empty, uses HTTP on port 80)"
   type        = string

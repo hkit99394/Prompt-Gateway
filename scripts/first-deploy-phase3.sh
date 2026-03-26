@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # First-deploy Phase 3: Application deploy (T-5.3.1 – T-5.3.6)
-# Builds and pushes Control Plane API and Provider Worker images to ECR,
-# updates ECS task definitions, deploys both services, and verifies they are running.
+# Builds and pushes the application artifacts for the selected processing mode,
+# updates ECS task definitions, and verifies that the selected runtime is active
+# while the unselected runtime is disabled.
 #
 # Prerequisites:
 #   - AWS credentials configured
@@ -18,8 +19,9 @@
 #   - ENV: dev (default), staging, or prod
 #   - IMAGE_TAG: tag for pushed images (default: latest)
 #   - AWS_REGION: default us-east-1
+#   - PROCESSING_MODE: ecs (default) or lambda
 #
-# Usage: ./scripts/first-deploy-phase3.sh [--build-only] [--skip-verify]
+# Usage: ./scripts/first-deploy-phase3.sh [--processing-mode ecs|lambda] [--build-only] [--skip-verify]
 
 set -euo pipefail
 
@@ -28,18 +30,42 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV="${ENV:-dev}"
 REGION="${AWS_REGION:-us-east-1}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
+PROCESSING_MODE="${PROCESSING_MODE:-ecs}"
 BUILD_ONLY=false
 SKIP_VERIFY=false
 
-for arg in "$@"; do
-  case $arg in
-    --build-only)   BUILD_ONLY=true ;;
-    --skip-verify)  SKIP_VERIFY=true ;;
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --processing-mode)
+      PROCESSING_MODE="${2:-}"
+      shift 2
+      ;;
+    --processing-mode=*)
+      PROCESSING_MODE="${1#*=}"
+      shift
+      ;;
+    --build-only)
+      BUILD_ONLY=true
+      shift
+      ;;
+    --skip-verify)
+      SKIP_VERIFY=true
+      shift
+      ;;
+    *)
+      echo "ERROR: Unknown argument: $1"
+      exit 1
+      ;;
   esac
 done
 
+if [ "$PROCESSING_MODE" != "ecs" ] && [ "$PROCESSING_MODE" != "lambda" ]; then
+  echo "ERROR: --processing-mode must be 'ecs' or 'lambda'."
+  exit 1
+fi
+
 echo "=== First-deploy Phase 3: Application deploy (T-5.3) ==="
-echo "Environment: $ENV  Region: $REGION  Image tag: $IMAGE_TAG"
+echo "Environment: $ENV  Region: $REGION  Image tag: $IMAGE_TAG  Processing mode: $PROCESSING_MODE"
 echo ""
 
 # Prerequisite: Docker installed and daemon running
@@ -88,29 +114,46 @@ docker push "$ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG"
 docker push "$ECR_REGISTRY/$ECR_REPO_API:latest"
 echo "  OK: $ECR_REPO_API pushed"
 
-# --- T-5.3.2: Build and push Provider Worker image ---
-echo ""
-echo "T-5.3.2: Build and push Provider Worker image"
-docker build --platform linux/amd64 \
-  -t "$ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG" \
-  -t "$ECR_REGISTRY/$ECR_REPO_WORKER:latest" \
-  -f "./${WORKER_CONTEXT}/Provider.Worker.Host/Dockerfile" \
-  "./${WORKER_CONTEXT}"
-docker push "$ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG"
-docker push "$ECR_REGISTRY/$ECR_REPO_WORKER:latest"
-echo "  OK: $ECR_REPO_WORKER pushed"
+if [ "$PROCESSING_MODE" = "ecs" ]; then
+  echo ""
+  echo "T-5.3.2: Build and push Provider Worker image"
+  docker build --platform linux/amd64 \
+    -t "$ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG" \
+    -t "$ECR_REGISTRY/$ECR_REPO_WORKER:latest" \
+    -f "./${WORKER_CONTEXT}/Provider.Worker.Host/Dockerfile" \
+    "./${WORKER_CONTEXT}"
+  docker push "$ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG"
+  docker push "$ECR_REGISTRY/$ECR_REPO_WORKER:latest"
+  echo "  OK: $ECR_REPO_WORKER pushed"
+else
+  echo ""
+  echo "T-5.3.2: Skipping Provider Worker container image because Lambda mode is selected"
+fi
 
 if [ "$BUILD_ONLY" = true ]; then
   echo ""
-  echo "=== Phase 3 (build only) complete. Skipping ECS deploy (--build-only). ==="
+  echo "=== Phase 3 (build only) complete. Skipping runtime deploy (--build-only). ==="
   exit 0
 fi
 
-# --- T-5.3.3: Create/update ECS task definitions with correct image URIs (and dev → SSM secrets) ---
+MODE_SWITCH_ARGS=(--mode "$PROCESSING_MODE" --skip-verify)
+if [ "$PROCESSING_MODE" = "ecs" ]; then
+  echo ""
+  echo "T-5.3.3: Switch processing mode to ECS"
+else
+  echo ""
+  echo "T-5.3.3: Switch processing mode to Lambda"
+fi
+"$REPO_ROOT/scripts/set-processing-mode.sh" "${MODE_SWITCH_ARGS[@]}"
+
+# --- T-5.3.4: Create/update ECS task definitions with correct image URIs (and dev → SSM secrets) ---
 echo ""
-echo "T-5.3.3: Update and register ECS task definitions"
+echo "T-5.3.4: Update and register ECS task definitions"
 API_IMAGE="$ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG"
 WORKER_IMAGE="$ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG"
+API_TASKDEF_FILE="$(mktemp "${TMPDIR:-/tmp}/api-taskdef.XXXXXX.json")"
+WORKER_TASKDEF_FILE="$(mktemp "${TMPDIR:-/tmp}/worker-taskdef.XXXXXX.json")"
+trap 'rm -f "$API_TASKDEF_FILE" "$WORKER_TASKDEF_FILE"' EXIT
 
 # Dev uses SSM for secrets; override so we don't inherit a revision that still points at Secrets Manager
 if [ "$(echo "$ENV" | tr '[:upper:]' '[:lower:]')" = "dev" ]; then
@@ -124,17 +167,22 @@ else
 fi
 
 aws ecs describe-task-definition --task-definition "$TASK_DEF_API" --region "$REGION" \
-  | jq "$API_JQ_IMAGE" > /tmp/api-taskdef.json
-aws ecs describe-task-definition --task-definition "$TASK_DEF_WORKER" --region "$REGION" \
-  | jq "$WORKER_JQ_IMAGE" > /tmp/worker-taskdef.json
+  | jq "$API_JQ_IMAGE" > "$API_TASKDEF_FILE"
 
-aws ecs register-task-definition --cli-input-json file:///tmp/api-taskdef.json --region "$REGION" > /dev/null
-aws ecs register-task-definition --cli-input-json file:///tmp/worker-taskdef.json --region "$REGION" > /dev/null
+if [ "$PROCESSING_MODE" = "ecs" ]; then
+  aws ecs describe-task-definition --task-definition "$TASK_DEF_WORKER" --region "$REGION" \
+    | jq "$WORKER_JQ_IMAGE" > "$WORKER_TASKDEF_FILE"
+fi
+
+aws ecs register-task-definition --cli-input-json "file://$API_TASKDEF_FILE" --region "$REGION" > /dev/null
+if [ "$PROCESSING_MODE" = "ecs" ]; then
+  aws ecs register-task-definition --cli-input-json "file://$WORKER_TASKDEF_FILE" --region "$REGION" > /dev/null
+fi
 echo "  OK: Task definitions registered"
 
-# --- T-5.3.4 & T-5.3.5: Deploy Control Plane API and Provider Worker services ---
+# --- T-5.3.5 & T-5.3.6: Deploy services ---
 echo ""
-echo "T-5.3.4: Deploy Control Plane API service"
+echo "T-5.3.5: Deploy Control Plane API service"
 aws ecs update-service \
   --cluster "$CLUSTER" \
   --service "$API_SERVICE" \
@@ -143,28 +191,30 @@ aws ecs update-service \
   --region "$REGION" \
   --no-cli-pager --query 'service.serviceName' --output text
 
-echo ""
-echo "T-5.3.5: Deploy Provider Worker service"
-aws ecs update-service \
-  --cluster "$CLUSTER" \
-  --service "$WORKER_SERVICE" \
-  --task-definition "$TASK_DEF_WORKER" \
-  --force-new-deployment \
-  --region "$REGION" \
-  --no-cli-pager --query 'service.serviceName' --output text
+if [ "$PROCESSING_MODE" = "ecs" ]; then
+  echo ""
+  echo "T-5.3.6: Deploy Provider Worker service"
+  aws ecs update-service \
+    --cluster "$CLUSTER" \
+    --service "$WORKER_SERVICE" \
+    --task-definition "$TASK_DEF_WORKER" \
+    --force-new-deployment \
+    --region "$REGION" \
+    --no-cli-pager --query 'service.serviceName' --output text
+fi
 
-# --- T-5.3.6: Verify tasks are running ---
+# --- T-5.3.7: Verify selected runtime is active ---
 if [ "$SKIP_VERIFY" = true ]; then
   echo ""
   echo "Skipping wait (--skip-verify). Services are updating."
 else
   echo ""
-  echo "T-5.3.6: Wait for services to stabilize"
+  echo "T-5.3.7: Wait for services to stabilize"
   aws ecs wait services-stable \
     --cluster "$CLUSTER" \
     --services "$API_SERVICE" "$WORKER_SERVICE" \
     --region "$REGION"
-  echo "  OK: Services stable"
+  "$REPO_ROOT/scripts/set-processing-mode.sh" --mode "$PROCESSING_MODE" --verify-only
 fi
 
 echo ""

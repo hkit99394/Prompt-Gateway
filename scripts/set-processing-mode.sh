@@ -1,0 +1,313 @@
+#!/usr/bin/env bash
+# Switch queue processing between ECS and Lambda for a target environment.
+# This updates Terraform, optionally packages Lambda artifacts, and verifies that
+# the selected runtime is active while the unselected runtime is disabled.
+#
+# Prerequisites:
+#   - AWS credentials configured
+#   - Terraform >= 1.0 installed
+#   - <env>.tfvars exists in infra/terraform/environments/<env>/
+#
+# Optional env vars:
+#   - ENV: dev (default), staging, or prod
+#   - AWS_REGION: default us-east-1
+#   - LAMBDA_RUNTIME: override managed runtime for Lambda mode
+#   - PROVIDER_LAMBDA_PACKAGE_PATH: override provider zip path
+#   - RESULT_LAMBDA_PACKAGE_PATH: override result zip path
+#   - OUTBOX_LAMBDA_PACKAGE_PATH: override outbox zip path
+#
+# Usage:
+#   ./scripts/set-processing-mode.sh --mode ecs [--plan-only] [--skip-verify]
+#   ./scripts/set-processing-mode.sh --mode lambda [--plan-only] [--skip-package] [--skip-verify]
+#   ./scripts/set-processing-mode.sh --mode ecs --verify-only
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV="${ENV:-dev}"
+REGION="${AWS_REGION:-us-east-1}"
+MODE=""
+PLAN_ONLY=false
+SKIP_PACKAGE=false
+SKIP_VERIFY=false
+VERIFY_ONLY=false
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --mode)
+      MODE="${2:-}"
+      shift 2
+      ;;
+    --mode=*)
+      MODE="${1#*=}"
+      shift
+      ;;
+    --plan-only)
+      PLAN_ONLY=true
+      shift
+      ;;
+    --skip-package)
+      SKIP_PACKAGE=true
+      shift
+      ;;
+    --skip-verify)
+      SKIP_VERIFY=true
+      shift
+      ;;
+    --verify-only)
+      VERIFY_ONLY=true
+      shift
+      ;;
+    *)
+      echo "ERROR: Unknown argument: $1"
+      exit 1
+      ;;
+  esac
+done
+
+if [ "$MODE" != "ecs" ] && [ "$MODE" != "lambda" ]; then
+  echo "ERROR: --mode must be 'ecs' or 'lambda'."
+  exit 1
+fi
+
+TF_DIR="$REPO_ROOT/infra/terraform/environments/$ENV"
+TFVARS_FILE="$TF_DIR/${ENV}.tfvars"
+ENABLE_LAMBDA_PROCESSING="false"
+
+if [ "$MODE" = "lambda" ]; then
+  ENABLE_LAMBDA_PROCESSING="true"
+fi
+
+PROVIDER_LAMBDA_NAME="prompt-gateway-${ENV}-provider-worker"
+RESULT_LAMBDA_NAME="prompt-gateway-${ENV}-result-ingestion"
+OUTBOX_LAMBDA_NAME="prompt-gateway-${ENV}-outbox-dispatch"
+OUTBOX_RULE_NAME="prompt-gateway-${ENV}-outbox-dispatch"
+CLUSTER_NAME="prompt-gateway-${ENV}"
+API_SERVICE_NAME="control-plane-api"
+WORKER_SERVICE_NAME="provider-worker"
+
+require_env_dir() {
+  if [ ! -d "$TF_DIR" ]; then
+    echo "ERROR: Terraform environment directory not found: $TF_DIR"
+    exit 1
+  fi
+
+  if [ ! -f "$TFVARS_FILE" ]; then
+    echo "ERROR: ${ENV}.tfvars not found. Copy from ${ENV}.tfvars.example first."
+    exit 1
+  fi
+}
+
+lambda_function_exists() {
+  local function_name="$1"
+  aws lambda get-function --function-name "$function_name" --region "$REGION" >/dev/null 2>&1
+}
+
+event_rule_exists() {
+  local rule_name="$1"
+  aws events describe-rule --name "$rule_name" --region "$REGION" >/dev/null 2>&1
+}
+
+verify_mode() {
+  local api_task_definition
+  local api_outbox_enabled
+  local api_result_enabled
+  local worker_desired_count
+  local worker_running_count
+
+  echo "Verifying $MODE processing mode..."
+
+  aws ecs wait services-stable \
+    --cluster "$CLUSTER_NAME" \
+    --services "$API_SERVICE_NAME" "$WORKER_SERVICE_NAME" \
+    --region "$REGION"
+
+  api_task_definition=$(aws ecs describe-services \
+    --cluster "$CLUSTER_NAME" \
+    --services "$API_SERVICE_NAME" \
+    --region "$REGION" \
+    --query 'services[0].taskDefinition' \
+    --output text)
+
+  api_outbox_enabled=$(aws ecs describe-task-definition \
+    --task-definition "$api_task_definition" \
+    --region "$REGION" \
+    --query 'taskDefinition.containerDefinitions[0].environment[?name==`HostedWorkers__EnableOutboxWorker`].value | [0]' \
+    --output text)
+  api_result_enabled=$(aws ecs describe-task-definition \
+    --task-definition "$api_task_definition" \
+    --region "$REGION" \
+    --query 'taskDefinition.containerDefinitions[0].environment[?name==`HostedWorkers__EnableResultQueueWorker`].value | [0]' \
+    --output text)
+  worker_desired_count=$(aws ecs describe-services \
+    --cluster "$CLUSTER_NAME" \
+    --services "$WORKER_SERVICE_NAME" \
+    --region "$REGION" \
+    --query 'services[0].desiredCount' \
+    --output text)
+  worker_running_count=$(aws ecs describe-services \
+    --cluster "$CLUSTER_NAME" \
+    --services "$WORKER_SERVICE_NAME" \
+    --region "$REGION" \
+    --query 'services[0].runningCount' \
+    --output text)
+
+  if [ "$MODE" = "lambda" ]; then
+    if [ "$api_outbox_enabled" != "false" ]; then
+      echo "FAIL: API outbox worker is still enabled (value=$api_outbox_enabled)"
+      exit 1
+    fi
+    if [ "$api_result_enabled" != "false" ]; then
+      echo "FAIL: API result queue worker is still enabled (value=$api_result_enabled)"
+      exit 1
+    fi
+    if [ "$worker_desired_count" != "0" ]; then
+      echo "FAIL: Provider ECS worker desired count is not zero (value=$worker_desired_count)"
+      exit 1
+    fi
+    if [ "$worker_running_count" != "0" ]; then
+      echo "FAIL: Provider ECS worker is still running tasks (runningCount=$worker_running_count)"
+      exit 1
+    fi
+    if ! lambda_function_exists "$PROVIDER_LAMBDA_NAME"; then
+      echo "FAIL: Provider Lambda function is missing"
+      exit 1
+    fi
+    if ! lambda_function_exists "$RESULT_LAMBDA_NAME"; then
+      echo "FAIL: Result Lambda function is missing"
+      exit 1
+    fi
+    if ! lambda_function_exists "$OUTBOX_LAMBDA_NAME"; then
+      echo "FAIL: Outbox Lambda function is missing"
+      exit 1
+    fi
+
+    provider_mapping_state=$(aws lambda list-event-source-mappings \
+      --function-name "$PROVIDER_LAMBDA_NAME" \
+      --region "$REGION" \
+      --query 'EventSourceMappings[0].State' \
+      --output text)
+    result_mapping_state=$(aws lambda list-event-source-mappings \
+      --function-name "$RESULT_LAMBDA_NAME" \
+      --region "$REGION" \
+      --query 'EventSourceMappings[0].State' \
+      --output text)
+
+    if [ "$provider_mapping_state" != "Enabled" ]; then
+      echo "FAIL: Provider Lambda event source mapping is not enabled (state=$provider_mapping_state)"
+      exit 1
+    fi
+    if [ "$result_mapping_state" != "Enabled" ]; then
+      echo "FAIL: Result Lambda event source mapping is not enabled (state=$result_mapping_state)"
+      exit 1
+    fi
+    if ! event_rule_exists "$OUTBOX_RULE_NAME"; then
+      echo "FAIL: Outbox schedule rule is missing"
+      exit 1
+    fi
+
+    echo "  OK: Lambda processing is active and ECS queue pollers are off"
+    return
+  fi
+
+  if [ "$api_outbox_enabled" != "true" ]; then
+    echo "FAIL: API outbox worker is not enabled for ECS mode (value=$api_outbox_enabled)"
+    exit 1
+  fi
+  if [ "$api_result_enabled" != "true" ]; then
+    echo "FAIL: API result queue worker is not enabled for ECS mode (value=$api_result_enabled)"
+    exit 1
+  fi
+  if [ "$worker_desired_count" = "0" ]; then
+    echo "FAIL: Provider ECS worker desired count is zero in ECS mode"
+    exit 1
+  fi
+  if [ "$worker_running_count" = "0" ]; then
+    echo "FAIL: Provider ECS worker has no running tasks in ECS mode"
+    exit 1
+  fi
+  if lambda_function_exists "$PROVIDER_LAMBDA_NAME"; then
+    echo "FAIL: Provider Lambda function still exists in ECS mode"
+    exit 1
+  fi
+  if lambda_function_exists "$RESULT_LAMBDA_NAME"; then
+    echo "FAIL: Result Lambda function still exists in ECS mode"
+    exit 1
+  fi
+  if lambda_function_exists "$OUTBOX_LAMBDA_NAME"; then
+    echo "FAIL: Outbox Lambda function still exists in ECS mode"
+    exit 1
+  fi
+  if event_rule_exists "$OUTBOX_RULE_NAME"; then
+    echo "FAIL: Outbox schedule rule still exists in ECS mode"
+    exit 1
+  fi
+
+  echo "  OK: ECS processing is active and Lambda processing is off"
+}
+
+require_env_dir
+
+echo "=== Processing mode switch ==="
+echo "Environment: $ENV  Region: $REGION  Mode: $MODE"
+echo ""
+
+if [ "$VERIFY_ONLY" = true ]; then
+  verify_mode
+  exit 0
+fi
+
+if [ "$MODE" = "lambda" ] && [ "$SKIP_PACKAGE" = false ]; then
+  echo "Packaging Lambda artifacts..."
+  "$REPO_ROOT/scripts/package-lambda-artifacts.sh"
+  echo ""
+fi
+
+cd "$TF_DIR"
+
+echo "terraform init"
+terraform init
+echo ""
+
+PLAN_ARGS=(
+  plan
+  "-var-file=${ENV}.tfvars"
+  "-var=enable_lambda_processing=${ENABLE_LAMBDA_PROCESSING}"
+  -out=tfplan
+)
+
+if [ "$MODE" = "lambda" ]; then
+  if [ -n "${LAMBDA_RUNTIME:-}" ]; then
+    PLAN_ARGS+=("-var=lambda_runtime=${LAMBDA_RUNTIME}")
+  fi
+  if [ -n "${PROVIDER_LAMBDA_PACKAGE_PATH:-}" ]; then
+    PLAN_ARGS+=("-var=provider_lambda_package_path=${PROVIDER_LAMBDA_PACKAGE_PATH}")
+  fi
+  if [ -n "${RESULT_LAMBDA_PACKAGE_PATH:-}" ]; then
+    PLAN_ARGS+=("-var=result_lambda_package_path=${RESULT_LAMBDA_PACKAGE_PATH}")
+  fi
+  if [ -n "${OUTBOX_LAMBDA_PACKAGE_PATH:-}" ]; then
+    PLAN_ARGS+=("-var=outbox_lambda_package_path=${OUTBOX_LAMBDA_PACKAGE_PATH}")
+  fi
+fi
+
+echo "terraform plan"
+terraform "${PLAN_ARGS[@]}"
+echo ""
+
+if [ "$PLAN_ONLY" = true ]; then
+  echo "Plan-only mode. Exiting. Run without --plan-only to apply."
+  exit 0
+fi
+
+echo "terraform apply"
+terraform apply -auto-approve tfplan
+echo ""
+
+if [ "$SKIP_VERIFY" = true ]; then
+  echo "Skipping verification (--skip-verify)"
+  exit 0
+fi
+
+verify_mode

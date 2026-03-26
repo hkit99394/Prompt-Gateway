@@ -22,6 +22,13 @@ provider "aws" {
   }
 }
 
+locals {
+  repo_root                    = abspath("${path.root}/../../../..")
+  provider_lambda_package_path = startswith(var.provider_lambda_package_path, "/") ? var.provider_lambda_package_path : abspath("${local.repo_root}/${var.provider_lambda_package_path}")
+  result_lambda_package_path   = startswith(var.result_lambda_package_path, "/") ? var.result_lambda_package_path : abspath("${local.repo_root}/${var.result_lambda_package_path}")
+  outbox_lambda_package_path   = startswith(var.outbox_lambda_package_path, "/") ? var.outbox_lambda_package_path : abspath("${local.repo_root}/${var.outbox_lambda_package_path}")
+}
+
 module "network" {
   source = "../../modules/network"
 
@@ -87,6 +94,7 @@ module "ecs_service" {
   api_desired_count                      = 2
   worker_desired_count                   = 2
   disable_api_hosted_workers             = var.enable_lambda_processing
+  disable_provider_worker_service        = var.enable_lambda_processing
   api_cpu                                = 512
   api_memory                             = 1024
   worker_cpu                             = 512
@@ -112,9 +120,9 @@ module "lambda_processing" {
   dynamodb_gsi_name            = module.dynamodb.gsi_name
   prompts_bucket_name          = module.s3.prompts_bucket_name
   results_bucket_name          = module.s3.results_bucket_name
-  provider_lambda_package_path = var.provider_lambda_package_path
-  result_lambda_package_path   = var.result_lambda_package_path
-  outbox_lambda_package_path   = var.outbox_lambda_package_path
+  provider_lambda_package_path = local.provider_lambda_package_path
+  result_lambda_package_path   = local.result_lambda_package_path
+  outbox_lambda_package_path   = local.outbox_lambda_package_path
 }
 
 # T-8.2 – T-8.6: CloudWatch alarms and SNS

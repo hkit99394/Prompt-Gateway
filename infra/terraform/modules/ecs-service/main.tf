@@ -326,7 +326,7 @@ resource "aws_ecs_service" "worker" {
   name            = "provider-worker"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.provider_worker.arn
-  desired_count   = var.worker_desired_count
+  desired_count   = var.disable_provider_worker_service ? 0 : var.worker_desired_count
   launch_type     = "FARGATE"
 
   network_configuration {

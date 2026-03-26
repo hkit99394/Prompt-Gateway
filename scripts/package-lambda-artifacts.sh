@@ -28,13 +28,14 @@ package_project() {
   local project_path="$1"
   local output_zip="$2"
   local project_name="$3"
+  local target_framework="$4"
 
   local publish_dir
   publish_dir="$(mktemp -d "${TMPDIR:-/tmp}/lambda-publish.XXXXXX")"
 
   echo ""
   echo "Packaging $project_name"
-  dotnet publish "$project_path" -c "$CONFIGURATION" -o "$publish_dir"
+  dotnet publish "$project_path" -c "$CONFIGURATION" -f "$target_framework" -o "$publish_dir"
 
   rm -f "$output_zip"
   (
@@ -53,17 +54,20 @@ echo "Artifacts dir: $ARTIFACTS_DIR"
 package_project \
   "$REPO_ROOT/Prompt Gateway Provider - OpenAI/src/Provider.Worker.Lambda/Provider.Worker.Lambda.csproj" \
   "$ARTIFACTS_DIR/provider-worker-lambda.zip" \
-  "Provider Worker Lambda"
+  "Provider Worker Lambda" \
+  "net8.0"
 
 package_project \
   "$REPO_ROOT/Prompt Gateway – Control Plane /src/ControlPlane.ResultLambda/ControlPlane.ResultLambda.csproj" \
   "$ARTIFACTS_DIR/control-plane-result-lambda.zip" \
-  "Control Plane Result Lambda"
+  "Control Plane Result Lambda" \
+  "net8.0"
 
 package_project \
   "$REPO_ROOT/Prompt Gateway – Control Plane /src/ControlPlane.OutboxLambda/ControlPlane.OutboxLambda.csproj" \
   "$ARTIFACTS_DIR/control-plane-outbox-lambda.zip" \
-  "Control Plane Outbox Lambda"
+  "Control Plane Outbox Lambda" \
+  "net8.0"
 
 echo ""
 echo "Done. Terraform defaults now point at:"

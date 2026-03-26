@@ -58,6 +58,14 @@ This produces:
 
 The environment variables `provider_lambda_package_path`, `result_lambda_package_path`, and `outbox_lambda_package_path` can override those defaults when needed.
 
+Those package path variables may be either absolute paths or repo-root-relative paths such as `artifacts/provider-worker-lambda.zip`.
+
+Enabling Lambda processing also changes the ECS side of the system:
+
+- the Control Plane API stops running its in-process outbox and result queue workers
+- the ECS provider worker service is scaled to `0`
+- SQS processing moves to the Lambda event source mappings and the scheduled outbox Lambda
+
 ## First-time backend setup
 
 Run the bootstrap script before first `terraform init`:

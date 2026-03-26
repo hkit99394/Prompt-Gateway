@@ -5,3 +5,8 @@
 aws_region      = "us-east-1"
 environment     = "prod"
 certificate_arn = "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID"  # ACM cert for HTTPS
+# Optional Lambda cutover:
+# enable_lambda_processing = true
+# provider_lambda_package_path = "artifacts/provider-worker-lambda.zip"
+# result_lambda_package_path = "artifacts/control-plane-result-lambda.zip"
+# outbox_lambda_package_path = "artifacts/control-plane-outbox-lambda.zip"

@@ -32,7 +32,7 @@ variable "enable_lambda_processing" {
 variable "lambda_runtime" {
   description = "Managed Lambda runtime identifier for the .NET functions"
   type        = string
-  default     = "dotnet10"
+  default     = "dotnet8"
 }
 
 variable "provider_lambda_package_path" {

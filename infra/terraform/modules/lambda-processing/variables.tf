@@ -14,7 +14,7 @@ variable "enable" {
 variable "lambda_runtime" {
   description = "Managed Lambda runtime identifier for the .NET functions"
   type        = string
-  default     = "dotnet10"
+  default     = "dotnet8"
 }
 
 variable "provider_lambda_role_arn" {
