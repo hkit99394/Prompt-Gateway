@@ -89,6 +89,7 @@ builder.Services.AddSingleton<JobOrchestrator>();
 builder.Services.AddSingleton<IResultIngestionOrchestrator, JobOrchestratorResultIngester>();
 builder.Services.AddSingleton<IResultMessageProcessor, ResultMessageProcessor>();
 builder.Services.AddSingleton<DispatchOutboxProcessor>();
+builder.Services.AddSingleton<IOutboxDispatchBatchProcessor, OutboxDispatchBatchProcessor>();
 builder.Services.AddHostedService<OutboxWorker>();
 
 var resultQueueOptions = new ResultQueueWorkerOptions

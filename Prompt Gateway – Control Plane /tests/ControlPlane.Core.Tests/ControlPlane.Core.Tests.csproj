@@ -10,6 +10,7 @@
     <ProjectReference Include="..\..\src\ControlPlane.Core\ControlPlane.Core.csproj" />
     <ProjectReference Include="..\..\src\ControlPlane.Aws\ControlPlane.Aws.csproj" />
     <ProjectReference Include="..\..\src\ControlPlane.Api\ControlPlane.Api.csproj" />
+    <ProjectReference Include="..\..\src\ControlPlane.OutboxLambda\ControlPlane.OutboxLambda.csproj" />
     <ProjectReference Include="..\..\src\ControlPlane.ResultLambda\ControlPlane.ResultLambda.csproj" />
   </ItemGroup>
 
