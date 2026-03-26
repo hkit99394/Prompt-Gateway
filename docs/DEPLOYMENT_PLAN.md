@@ -244,6 +244,8 @@ This document describes the target architecture, infrastructure-as-code layout, 
 
 **Automation:** Run `./scripts/first-deploy-phase4.sh` to execute T-5.4.1 – T-5.4.5 after either ECS mode or Lambda mode is deployed. Uses `scripts/smoke-test.sh`; resolves BASE_URL from the environment’s ALB (or set `BASE_URL` / `HEALTH_CHECK_BASE_URL`), uploads a smoke prompt fixture to S3 by default, and resolves the API key from SSM (dev) or Secrets Manager (staging/prod). Optional env vars: `ENV`, `BASE_URL`, `API_KEY`, `AWS_REGION`, `SMOKE_INPUT_REF`, `SMOKE_PROMPT_BUCKET`, `SMOKE_PROMPT_TEXT`, `SMOKE_SKIP_PROMPT_UPLOAD=true`. Use `--insecure` for HTTPS with self-signed or ALB hostname when not using a custom domain. Requires Phase 1–3 complete and `jq` installed.
 
+For Lambda-mode promotion while keeping ECS mode as a fallback, use `./scripts/promote-lambda-mode.sh staging` and then `./scripts/promote-lambda-mode.sh prod --check-staging`.
+
 ---
 
 ## 6. Secrets & Configuration – Detailed Tasks

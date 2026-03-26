@@ -65,6 +65,24 @@ Enabling Lambda processing also changes the ECS side of the system:
 - the Control Plane API stops running its in-process outbox and result queue workers
 - the ECS provider worker service is scaled to `0`
 - SQS processing moves to the Lambda event source mappings and the scheduled outbox Lambda
+- ECS mode remains a supported fallback via `./scripts/set-processing-mode.sh --mode ecs`
+
+## Promotion Flow
+
+Recommended Lambda promotion order:
+
+1. Validate `dev` in Lambda mode
+2. Promote `staging`
+3. Promote `prod`
+
+Use:
+
+```bash
+./scripts/promote-lambda-mode.sh staging
+./scripts/promote-lambda-mode.sh prod --check-staging
+```
+
+This keeps ECS mode available as a rollback path while verifying that Lambda mode is active and smoke tests pass in each environment.
 
 ## First-time backend setup
 

@@ -96,7 +96,7 @@ if [ "$SMOKE_SKIP_PROMPT_UPLOAD" != "true" ]; then
     PROMPT_BUCKET="prompt-gateway-${ENV}-prompts-${ACCOUNT}"
   fi
 
-  TMP_PROMPT_FILE="$(mktemp "${TMPDIR:-/tmp}/smoke-prompt.XXXXXX.txt")"
+  TMP_PROMPT_FILE="$(mktemp -t smoke-prompt)"
   trap 'rm -f "$TMP_PROMPT_FILE"' EXIT
   printf '%s\n' "$SMOKE_PROMPT_TEXT" > "$TMP_PROMPT_FILE"
 
