@@ -13,19 +13,16 @@ public sealed class ResultQueueProcessor
 {
     private readonly IAmazonSQS _sqs;
     private readonly AwsQueueOptions _options;
-    private readonly JobOrchestrator _orchestrator;
-    private readonly ILogger<ResultQueueProcessor> _logger;
+    private readonly IResultMessageProcessor _messageProcessor;
 
     public ResultQueueProcessor(
         IAmazonSQS sqs,
         AwsQueueOptions options,
-        JobOrchestrator orchestrator,
-        ILogger<ResultQueueProcessor> logger)
+        IResultMessageProcessor messageProcessor)
     {
         _sqs = sqs;
         _options = options;
-        _orchestrator = orchestrator;
-        _logger = logger;
+        _messageProcessor = messageProcessor;
     }
 
     /// <summary>
@@ -50,40 +47,16 @@ public sealed class ResultQueueProcessor
             return false;
 
         var message = response.Messages[0];
-        var body = message.Body ?? string.Empty;
-
-        if (!ProviderResultEventContractMapper.TryParseWorkerResultEvent(body, out var resultEvent, out var parseError))
-        {
-            _logger.LogWarning("Result queue message parse failed: {Error}. Deleting message to avoid poison. MessageId={MessageId}",
-                parseError, message.MessageId);
-            await _sqs.DeleteMessageAsync(_options.ResultQueueUrl, message.ReceiptHandle, cancellationToken);
-            return true;
-        }
-
-        if (resultEvent is null)
+        var result = await _messageProcessor.ProcessAsync(
+            message.Body ?? string.Empty,
+            message.MessageId,
+            cancellationToken);
+        if (result.ShouldAcknowledge)
         {
             await _sqs.DeleteMessageAsync(_options.ResultQueueUrl, message.ReceiptHandle, cancellationToken);
             return true;
         }
 
-        using (_logger.BeginScope(new Dictionary<string, object?>
-               {
-                   ["job_id"] = resultEvent.JobId,
-                   ["attempt_id"] = resultEvent.AttemptId
-               }))
-        {
-            try
-            {
-                await _orchestrator.IngestResultAsync(resultEvent, cancellationToken);
-                await _sqs.DeleteMessageAsync(_options.ResultQueueUrl, message.ReceiptHandle, cancellationToken);
-                _logger.LogInformation("Ingested result for job {JobId} attempt {AttemptId}.", resultEvent.JobId, resultEvent.AttemptId);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Result ingestion failed. Message will retry or go to DLQ.");
-                throw;
-            }
-        }
+        throw new InvalidOperationException("Result ingestion failed. Message will retry or go to DLQ.");
     }
 }
