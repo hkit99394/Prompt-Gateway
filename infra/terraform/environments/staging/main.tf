@@ -66,43 +66,66 @@ module "iam" {
 module "ecs_service" {
   source = "../../modules/ecs-service"
 
-  environment                   = var.environment
-  vpc_id                        = module.network.vpc_id
-  private_subnet_ids            = module.network.private_subnet_ids
-  public_subnet_ids             = module.network.public_subnet_ids
-  alb_security_group_id         = module.network.alb_security_group_id
-  ecs_api_security_group_id     = module.network.ecs_api_security_group_id
-  ecs_worker_security_group_id  = module.network.ecs_worker_security_group_id
+  environment                            = var.environment
+  vpc_id                                 = module.network.vpc_id
+  private_subnet_ids                     = module.network.private_subnet_ids
+  public_subnet_ids                      = module.network.public_subnet_ids
+  alb_security_group_id                  = module.network.alb_security_group_id
+  ecs_api_security_group_id              = module.network.ecs_api_security_group_id
+  ecs_worker_security_group_id           = module.network.ecs_worker_security_group_id
   ecs_execution_control_plane_role_arn   = module.iam.ecs_execution_control_plane_role_arn
   ecs_execution_provider_worker_role_arn = module.iam.ecs_execution_provider_worker_role_arn
-  control_plane_task_role_arn   = module.iam.control_plane_task_role_arn
-  provider_worker_task_role_arn = module.iam.provider_worker_task_role_arn
-  dynamodb_table_name           = module.dynamodb.table_name
-  worker_dedupe_table_name      = module.dynamodb.dedupe_table_name
-  dynamodb_gsi_name             = module.dynamodb.gsi_name
-  dispatch_queue_url            = module.sqs.dispatch_queue_url
-  result_queue_url              = module.sqs.result_queue_url
-  prompts_bucket_name           = module.s3.prompts_bucket_name
-  results_bucket_name           = module.s3.results_bucket_name
-  api_desired_count             = 2
-  worker_desired_count          = 2
-  api_cpu                       = 512
-  api_memory                    = 1024
-  worker_cpu                    = 512
-  worker_memory                 = 1024
-  certificate_arn               = var.certificate_arn
+  control_plane_task_role_arn            = module.iam.control_plane_task_role_arn
+  provider_worker_task_role_arn          = module.iam.provider_worker_task_role_arn
+  dynamodb_table_name                    = module.dynamodb.table_name
+  worker_dedupe_table_name               = module.dynamodb.dedupe_table_name
+  dynamodb_gsi_name                      = module.dynamodb.gsi_name
+  dispatch_queue_url                     = module.sqs.dispatch_queue_url
+  result_queue_url                       = module.sqs.result_queue_url
+  prompts_bucket_name                    = module.s3.prompts_bucket_name
+  results_bucket_name                    = module.s3.results_bucket_name
+  api_desired_count                      = 2
+  worker_desired_count                   = 2
+  api_cpu                                = 512
+  api_memory                             = 1024
+  worker_cpu                             = 512
+  worker_memory                          = 1024
+  certificate_arn                        = var.certificate_arn
+}
+
+module "lambda_processing" {
+  source = "../../modules/lambda-processing"
+
+  environment                  = var.environment
+  enable                       = var.enable_lambda_processing
+  lambda_runtime               = var.lambda_runtime
+  provider_lambda_role_arn     = module.iam.provider_worker_lambda_role_arn
+  result_lambda_role_arn       = module.iam.result_lambda_role_arn
+  outbox_lambda_role_arn       = module.iam.outbox_lambda_role_arn
+  dispatch_queue_arn           = module.sqs.dispatch_queue_arn
+  dispatch_queue_url           = module.sqs.dispatch_queue_url
+  result_queue_arn             = module.sqs.result_queue_arn
+  result_queue_url             = module.sqs.result_queue_url
+  dynamodb_table_name          = module.dynamodb.table_name
+  worker_dedupe_table_name     = module.dynamodb.dedupe_table_name
+  dynamodb_gsi_name            = module.dynamodb.gsi_name
+  prompts_bucket_name          = module.s3.prompts_bucket_name
+  results_bucket_name          = module.s3.results_bucket_name
+  provider_lambda_package_path = var.provider_lambda_package_path
+  result_lambda_package_path   = var.result_lambda_package_path
+  outbox_lambda_package_path   = var.outbox_lambda_package_path
 }
 
 # T-8.2 – T-8.6: CloudWatch alarms and SNS
 module "monitoring" {
   source = "../../modules/monitoring"
 
-  environment            = var.environment
-  alb_arn_suffix         = module.ecs_service.alb_arn_suffix
+  environment             = var.environment
+  alb_arn_suffix          = module.ecs_service.alb_arn_suffix
   target_group_arn_suffix = module.ecs_service.api_target_group_arn_suffix
-  ecs_cluster_name       = module.ecs_service.cluster_name
-  ecs_api_service_name   = module.ecs_service.api_service_name
-  sqs_dlq_name           = module.sqs.dlq_name
-  dynamodb_table_name    = module.dynamodb.table_name
-  alarm_email            = var.alarm_email
+  ecs_cluster_name        = module.ecs_service.cluster_name
+  ecs_api_service_name    = module.ecs_service.api_service_name
+  sqs_dlq_name            = module.sqs.dlq_name
+  dynamodb_table_name     = module.dynamodb.table_name
+  alarm_email             = var.alarm_email
 }

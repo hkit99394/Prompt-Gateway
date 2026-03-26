@@ -23,7 +23,7 @@ resource "aws_sqs_queue" "dispatch" {
   name = "${local.name_prefix}-dispatch"
 
   visibility_timeout_seconds = var.visibility_timeout_seconds
-  message_retention_seconds = var.message_retention_seconds
+  message_retention_seconds  = var.message_retention_seconds
 
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.dlq.arn

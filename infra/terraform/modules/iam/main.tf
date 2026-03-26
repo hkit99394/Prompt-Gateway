@@ -5,8 +5,8 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 locals {
-  account_id   = data.aws_caller_identity.current.account_id
-  region       = data.aws_region.current.name
+  account_id = data.aws_caller_identity.current.account_id
+  region     = data.aws_region.current.name
   # Least privilege: Control Plane gets API keys only; Provider Worker gets OpenAI key only
   control_plane_secrets_arns = [
     "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:prompt-gateway/${var.environment}/api-keys*"
@@ -247,7 +247,7 @@ resource "aws_iam_role_policy" "control_plane_ssm" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
+        Effect   = "Allow"
         Action   = "ssm:GetParameter"
         Resource = [local.ssm_prefix]
       }
@@ -359,6 +359,217 @@ resource "aws_iam_role_policy" "provider_worker_secrets" {
         Effect   = "Allow"
         Action   = "secretsmanager:GetSecretValue"
         Resource = local.provider_worker_secrets_arns
+      }
+    ]
+  })
+}
+
+# Lambda execution roles
+resource "aws_iam_role" "provider_worker_lambda" {
+  name = "prompt-gateway-${var.environment}-provider-worker-lambda"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "prompt-gateway-${var.environment}-provider-worker-lambda"
+    Environment = var.environment
+  }
+}
+
+resource "aws_iam_role" "result_lambda" {
+  name = "prompt-gateway-${var.environment}-result-ingestion-lambda"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "prompt-gateway-${var.environment}-result-ingestion-lambda"
+    Environment = var.environment
+  }
+}
+
+resource "aws_iam_role" "outbox_lambda" {
+  name = "prompt-gateway-${var.environment}-outbox-dispatch-lambda"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "prompt-gateway-${var.environment}-outbox-dispatch-lambda"
+    Environment = var.environment
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "provider_worker_lambda_basic" {
+  role       = aws_iam_role.provider_worker_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "result_lambda_basic" {
+  role       = aws_iam_role.result_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "outbox_lambda_basic" {
+  role       = aws_iam_role.outbox_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "provider_worker_lambda_runtime" {
+  name = "runtime"
+  role = aws_iam_role.provider_worker_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:ChangeMessageVisibility",
+          "sqs:GetQueueAttributes",
+          "sqs:SendMessage"
+        ]
+        Resource = [
+          var.dispatch_queue_arn,
+          var.result_queue_arn
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = [var.dedupe_table_arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject"
+        ]
+        Resource = [
+          "${var.prompts_bucket_arn}/*",
+          "${var.results_bucket_arn}/*"
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = local.provider_worker_secrets_arns
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
+        Resource = [local.ssm_openai_key_param_arn]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "result_lambda_runtime" {
+  name = "runtime"
+  role = aws_iam_role.result_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:ChangeMessageVisibility",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = [var.result_queue_arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:DescribeTable",
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:BatchWriteItem",
+          "dynamodb:TransactWriteItems"
+        ]
+        Resource = [
+          var.dynamodb_table_arn,
+          "${var.dynamodb_table_arn}/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "outbox_lambda_runtime" {
+  name = "runtime"
+  role = aws_iam_role.outbox_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = [var.dispatch_queue_arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:DescribeTable",
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:BatchWriteItem",
+          "dynamodb:TransactWriteItems"
+        ]
+        Resource = [
+          var.dynamodb_table_arn,
+          "${var.dynamodb_table_arn}/index/*"
+        ]
       }
     ]
   })

@@ -17,3 +17,33 @@ variable "alarm_email" {
   type        = string
   default     = ""
 }
+
+variable "enable_lambda_processing" {
+  description = "Provision Lambda queue processors and the scheduled outbox dispatcher"
+  type        = bool
+  default     = false
+}
+
+variable "lambda_runtime" {
+  description = "Managed Lambda runtime identifier for the .NET functions"
+  type        = string
+  default     = "dotnet10"
+}
+
+variable "provider_lambda_package_path" {
+  description = "Path to the provider Lambda zip package"
+  type        = string
+  default     = "artifacts/provider-worker-lambda.zip"
+}
+
+variable "result_lambda_package_path" {
+  description = "Path to the result Lambda zip package"
+  type        = string
+  default     = "artifacts/control-plane-result-lambda.zip"
+}
+
+variable "outbox_lambda_package_path" {
+  description = "Path to the outbox Lambda zip package"
+  type        = string
+  default     = "artifacts/control-plane-outbox-lambda.zip"
+}

@@ -4,9 +4,9 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  account_id = data.aws_caller_identity.current.account_id
-  prompts_bucket_name  = "${var.bucket_name_prefix}-${var.environment}-prompts-${local.account_id}"
-  results_bucket_name  = "${var.bucket_name_prefix}-${var.environment}-results-${local.account_id}"
+  account_id          = data.aws_caller_identity.current.account_id
+  prompts_bucket_name = "${var.bucket_name_prefix}-${var.environment}-prompts-${local.account_id}"
+  results_bucket_name = "${var.bucket_name_prefix}-${var.environment}-results-${local.account_id}"
 }
 
 # T-2.7.1: Prompts bucket (versioning, encryption)

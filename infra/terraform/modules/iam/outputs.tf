@@ -20,3 +20,18 @@ output "provider_worker_task_role_arn" {
   description = "Provider Worker task role ARN"
   value       = aws_iam_role.provider_worker.arn
 }
+
+output "provider_worker_lambda_role_arn" {
+  description = "Provider worker Lambda role ARN"
+  value       = aws_iam_role.provider_worker_lambda.arn
+}
+
+output "result_lambda_role_arn" {
+  description = "Result ingestion Lambda role ARN"
+  value       = aws_iam_role.result_lambda.arn
+}
+
+output "outbox_lambda_role_arn" {
+  description = "Outbox dispatch Lambda role ARN"
+  value       = aws_iam_role.outbox_lambda.arn
+}

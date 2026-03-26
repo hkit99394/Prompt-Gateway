@@ -155,7 +155,7 @@ resource "aws_lb_listener" "https" {
 # T-2.6.5: CloudWatch log groups
 resource "aws_cloudwatch_log_group" "api" {
   name              = "/ecs/prompt-gateway-${var.environment}/control-plane-api"
-  retention_in_days  = 14
+  retention_in_days = 14
 
   tags = {
     Name        = "prompt-gateway-${var.environment}-api"
@@ -165,7 +165,7 @@ resource "aws_cloudwatch_log_group" "api" {
 
 resource "aws_cloudwatch_log_group" "worker" {
   name              = "/ecs/prompt-gateway-${var.environment}/provider-worker"
-  retention_in_days  = 14
+  retention_in_days = 14
 
   tags = {
     Name        = "prompt-gateway-${var.environment}-worker"
@@ -218,7 +218,7 @@ resource "aws_ecs_task_definition" "control_plane_api" {
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.api.name
           "awslogs-region"        = local.region
-          "awslogs-stream-prefix"  = "ecs"
+          "awslogs-stream-prefix" = "ecs"
         }
       }
 
@@ -277,7 +277,7 @@ resource "aws_ecs_task_definition" "provider_worker" {
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.worker.name
           "awslogs-region"        = local.region
-          "awslogs-stream-prefix"  = "ecs"
+          "awslogs-stream-prefix" = "ecs"
         }
       }
     }

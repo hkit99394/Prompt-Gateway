@@ -38,7 +38,7 @@ resource "aws_dynamodb_table" "main" {
   # T-2.3.3: TTL for job/event/outbox cleanup
   ttl {
     attribute_name = "ttl"
-    enabled       = true
+    enabled        = true
   }
 
   # T-2.3.5: Server-side encryption (AWS managed key)

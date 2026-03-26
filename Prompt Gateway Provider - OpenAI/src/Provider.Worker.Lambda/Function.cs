@@ -99,6 +99,9 @@ public sealed class ProviderDispatchFunction
     private static IHost BuildHost()
     {
         var builder = Host.CreateApplicationBuilder();
+        LambdaSecretConfiguration.ApplyAsync(builder.Configuration, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
 
         builder.Services.AddOptions<ProviderWorkerOptions>()
             .Bind(builder.Configuration.GetSection(ProviderWorkerOptions.SectionName))
