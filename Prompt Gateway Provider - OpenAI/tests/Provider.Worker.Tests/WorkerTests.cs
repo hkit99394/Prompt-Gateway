@@ -61,12 +61,7 @@ public class WorkerTests
             logger,
             sqs,
             options,
-            dedupe,
-            templateStore,
-            promptBuilder,
-            openAi,
-            payloadStore,
-            publisher);
+            CreateProcessor(options, dedupe, templateStore, promptBuilder, openAi, payloadStore, publisher));
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var runTask = worker.RunAsync(cts.Token);
@@ -123,12 +118,7 @@ public class WorkerTests
             logger,
             sqs,
             options,
-            dedupe,
-            templateStore,
-            promptBuilder,
-            openAi,
-            payloadStore,
-            publisher);
+            CreateProcessor(options, dedupe, templateStore, promptBuilder, openAi, payloadStore, publisher));
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var runTask = worker.RunAsync(cts.Token);
@@ -174,12 +164,7 @@ public class WorkerTests
             logger,
             sqs,
             options,
-            dedupe,
-            templateStore,
-            promptBuilder,
-            openAi,
-            payloadStore,
-            publisher);
+            CreateProcessor(options, dedupe, templateStore, promptBuilder, openAi, payloadStore, publisher));
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var runTask = worker.RunAsync(cts.Token);
@@ -231,12 +216,7 @@ public class WorkerTests
             logger,
             sqs,
             options,
-            dedupe,
-            templateStore,
-            promptBuilder,
-            openAi,
-            payloadStore,
-            publisher);
+            CreateProcessor(options, dedupe, templateStore, promptBuilder, openAi, payloadStore, publisher));
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var runTask = worker.RunAsync(cts.Token);
@@ -292,12 +272,7 @@ public class WorkerTests
             logger,
             sqs,
             options,
-            dedupe,
-            templateStore,
-            promptBuilder,
-            openAi,
-            payloadStore,
-            publisher);
+            CreateProcessor(options, dedupe, templateStore, promptBuilder, openAi, payloadStore, publisher));
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var runTask = worker.RunAsync(cts.Token);
@@ -363,12 +338,7 @@ public class WorkerTests
             logger,
             sqs,
             options,
-            dedupe,
-            templateStore,
-            promptBuilder,
-            openAi,
-            payloadStore,
-            publisher);
+            CreateProcessor(options, dedupe, templateStore, promptBuilder, openAi, payloadStore, publisher));
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var runTask = worker.RunAsync(cts.Token);
@@ -383,6 +353,87 @@ public class WorkerTests
             Arg.Any<CancellationToken>());
         await dedupe.DidNotReceive()
             .MarkCompletedAsync("job-6", "attempt-6", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RunAsync_ExtendsVisibilityWhenDuplicateIsInProgress()
+    {
+        var logger = Substitute.For<ILogger<Worker>>();
+        var sqs = Substitute.For<IQueueClient>();
+        var options = TestOptions.Create(new ProviderWorkerOptions
+        {
+            InputQueueUrl = "https://sqs.us-east-1.amazonaws.com/123/input",
+            OutputQueueUrl = "https://sqs.us-east-1.amazonaws.com/123/output",
+            MaxConcurrency = 1,
+            MaxMessages = 1,
+            WaitTimeSeconds = 0,
+            VisibilityTimeoutSeconds = 30
+        });
+        var dedupe = Substitute.For<IDedupeStore>();
+        var templateStore = Substitute.For<IPromptTemplateStore>();
+        var promptBuilder = Substitute.For<IPromptBuilder>();
+        var openAi = Substitute.For<IOpenAiClient>();
+        var payloadStore = Substitute.For<IResultPayloadStore>();
+        var publisher = Substitute.For<IResultPublisher>();
+
+        var message = new QueueMessage
+        {
+            Body = """
+                   { "job_id": "job-7", "attempt_id": "attempt-7", "task_type": "chat_completion", "prompt_s3_key": "prompts/job-7.txt" }
+                   """,
+            ReceiptHandle = "rh-7"
+        };
+
+        sqs.ReceiveMessageAsync(Arg.Any<QueueReceiveRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new QueueReceiveResult { Messages = new List<QueueMessage> { message } },
+                new QueueReceiveResult());
+
+        dedupe.TryStartAsync("job-7", "attempt-7", Arg.Any<CancellationToken>())
+            .Returns(DedupeDecision.DuplicateInProgress);
+
+        var worker = new Worker(
+            logger,
+            sqs,
+            options,
+            CreateProcessor(options, dedupe, templateStore, promptBuilder, openAi, payloadStore, publisher));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var runTask = worker.RunAsync(cts.Token);
+
+        await Task.Delay(100);
+        cts.Cancel();
+        await runTask;
+
+        await sqs.Received(1).ChangeMessageVisibilityAsync(
+            options.Value.InputQueueUrl,
+            "rh-7",
+            options.Value.VisibilityTimeoutSeconds,
+            Arg.Any<CancellationToken>());
+        await sqs.DidNotReceive().DeleteMessageAsync(
+            options.Value.InputQueueUrl,
+            "rh-7",
+            Arg.Any<CancellationToken>());
+    }
+
+    private static IProviderMessageProcessor CreateProcessor(
+        IOptions<ProviderWorkerOptions> options,
+        IDedupeStore dedupe,
+        IPromptTemplateStore templateStore,
+        IPromptBuilder promptBuilder,
+        IOpenAiClient openAi,
+        IResultPayloadStore payloadStore,
+        IResultPublisher publisher)
+    {
+        return new ProviderMessageProcessor(
+            Substitute.For<ILogger<ProviderMessageProcessor>>(),
+            options,
+            dedupe,
+            templateStore,
+            promptBuilder,
+            openAi,
+            payloadStore,
+            publisher);
     }
 
     private static IOptions<ProviderWorkerOptions> CreateOptions()

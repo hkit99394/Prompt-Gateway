@@ -13,11 +13,7 @@ builder.Services.AddOptions<ProviderWorkerOptions>()
     .ValidateOnStart();
 
 builder.Services.AddProviderWorkerAws();
-builder.Services.AddSingleton<IPromptTemplateStore, PromptTemplateStore>();
-builder.Services.AddSingleton<IPromptBuilder, PromptBuilder>();
-builder.Services.AddSingleton<IResultPayloadStore, ResultPayloadStore>();
-builder.Services.AddSingleton<OpenAiClient>();
-builder.Services.AddSingleton<IOpenAiClient>(sp => sp.GetRequiredService<OpenAiClient>());
+builder.Services.AddProviderWorkerCore();
 
 builder.Services.AddHostedService<Worker>();
 
