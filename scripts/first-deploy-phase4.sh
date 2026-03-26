@@ -14,6 +14,10 @@
 #   - BASE_URL: override (e.g. https://api.example.com); otherwise derived from ALB
 #   - API_KEY: override; otherwise fetched from SSM (dev) or Secrets Manager (staging/prod)
 #   - HEALTH_CHECK_BASE_URL: same as BASE_URL; used when set to avoid --insecure for custom domains
+#   - SMOKE_INPUT_REF: prompt key or s3://bucket/key override (default: prompts/smoke-test.txt)
+#   - SMOKE_PROMPT_BUCKET: explicit prompt bucket override when SMOKE_INPUT_REF is not an S3 URI
+#   - SMOKE_PROMPT_TEXT: prompt body uploaded before the smoke test
+#   - SMOKE_SKIP_PROMPT_UPLOAD=true: skip uploading the smoke prompt fixture
 #   - AWS_REGION: default us-east-1
 #
 # Usage: ./scripts/first-deploy-phase4.sh [--insecure]
@@ -26,6 +30,9 @@ ENV="${ENV:-dev}"
 REGION="${AWS_REGION:-us-east-1}"
 USE_INSECURE=""
 [ "${1:-}" = "--insecure" ] && USE_INSECURE="--insecure"
+INPUT_REF="${SMOKE_INPUT_REF:-prompts/smoke-test.txt}"
+SMOKE_PROMPT_TEXT="${SMOKE_PROMPT_TEXT:-Reply with exactly: smoke test ok}"
+SMOKE_SKIP_PROMPT_UPLOAD="${SMOKE_SKIP_PROMPT_UPLOAD:-false}"
 
 echo "=== First-deploy Phase 4: Smoke tests (T-5.4) ==="
 echo "Environment: $ENV  Region: $REGION"
@@ -71,11 +78,43 @@ if [ -z "$API_KEY" ]; then
   exit 1
 fi
 
+if [ "$SMOKE_SKIP_PROMPT_UPLOAD" != "true" ]; then
+  ACCOUNT=$(aws sts get-caller-identity --query Account --output text --region "$REGION" 2>/dev/null || true)
+  if [ -z "$ACCOUNT" ]; then
+    echo "Error: Could not resolve AWS account for smoke prompt upload."
+    exit 1
+  fi
+
+  PROMPT_BUCKET="${SMOKE_PROMPT_BUCKET:-}"
+  PROMPT_KEY="$INPUT_REF"
+  if [[ "$INPUT_REF" =~ ^s3://([^/]+)/(.+)$ ]]; then
+    PROMPT_BUCKET="${BASH_REMATCH[1]}"
+    PROMPT_KEY="${BASH_REMATCH[2]}"
+  fi
+
+  if [ -z "$PROMPT_BUCKET" ]; then
+    PROMPT_BUCKET="prompt-gateway-${ENV}-prompts-${ACCOUNT}"
+  fi
+
+  TMP_PROMPT_FILE="$(mktemp "${TMPDIR:-/tmp}/smoke-prompt.XXXXXX.txt")"
+  trap 'rm -f "$TMP_PROMPT_FILE"' EXIT
+  printf '%s\n' "$SMOKE_PROMPT_TEXT" > "$TMP_PROMPT_FILE"
+
+  echo "Uploading smoke prompt fixture to s3://$PROMPT_BUCKET/$PROMPT_KEY"
+  aws s3api put-object \
+    --bucket "$PROMPT_BUCKET" \
+    --key "$PROMPT_KEY" \
+    --body "$TMP_PROMPT_FILE" \
+    --content-type "text/plain; charset=utf-8" \
+    --region "$REGION" >/dev/null
+  echo ""
+fi
+
 # T-5.4.1 – T-5.4.5: run smoke-test.sh (GET /health, GET /ready, POST /jobs, poll, GET /result)
 cd "$REPO_ROOT"
 chmod +x scripts/smoke-test.sh
 if [ -n "$USE_INSECURE" ]; then
-  exec ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY" "$USE_INSECURE"
+  SMOKE_INPUT_REF="$INPUT_REF" exec ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY" "$USE_INSECURE"
 else
-  exec ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY"
+  SMOKE_INPUT_REF="$INPUT_REF" exec ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY"
 fi

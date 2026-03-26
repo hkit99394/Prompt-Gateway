@@ -74,6 +74,8 @@ curl -i \
 
 - Startup fails with API key configuration error:
   - Ensure at least one key exists in `ApiSecurity:ApiKeys` or `ApiSecurity:ApiKey`.
+- Unexpected provider fallback in a single-provider deployment:
+  - Leave `Routing:FallbackProviders` empty unless that provider runtime is actually deployed.
 - Requests return `401`:
   - Verify `X-API-Key` header is present.
   - Confirm key value exactly matches configured key (case-sensitive).

@@ -29,6 +29,7 @@ if [ "${3:-}" = "--insecure" ]; then
 fi
 
 echo "Smoke test: BASE_URL=$BASE_URL"
+echo "Smoke test: INPUT_REF=$INPUT_REF"
 
 # T-7.3: GET /health
 echo "  GET /health..."
