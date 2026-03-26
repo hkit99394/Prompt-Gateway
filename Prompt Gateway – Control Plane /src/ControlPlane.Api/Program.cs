@@ -84,13 +84,27 @@ var outboxOptions = new OutboxWorkerOptions
         double.TryParse(builder.Configuration["Outbox:ErrorDelaySeconds"], out var errorDelay) ? errorDelay : 2)
 };
 
+var hostedWorkerOptions = new HostedWorkerOptions
+{
+    EnableOutboxWorker = bool.TryParse(builder.Configuration["HostedWorkers:EnableOutboxWorker"], out var enableOutboxWorker)
+        ? enableOutboxWorker
+        : true,
+    EnableResultQueueWorker = bool.TryParse(builder.Configuration["HostedWorkers:EnableResultQueueWorker"], out var enableResultQueueWorker)
+        ? enableResultQueueWorker
+        : true
+};
+
+builder.Services.AddSingleton(hostedWorkerOptions);
 builder.Services.AddSingleton(outboxOptions);
 builder.Services.AddSingleton<JobOrchestrator>();
 builder.Services.AddSingleton<IResultIngestionOrchestrator, JobOrchestratorResultIngester>();
 builder.Services.AddSingleton<IResultMessageProcessor, ResultMessageProcessor>();
 builder.Services.AddSingleton<DispatchOutboxProcessor>();
 builder.Services.AddSingleton<IOutboxDispatchBatchProcessor, OutboxDispatchBatchProcessor>();
-builder.Services.AddHostedService<OutboxWorker>();
+if (hostedWorkerOptions.EnableOutboxWorker)
+{
+    builder.Services.AddHostedService<OutboxWorker>();
+}
 
 var resultQueueOptions = new ResultQueueWorkerOptions
 {
@@ -101,7 +115,10 @@ var resultQueueOptions = new ResultQueueWorkerOptions
 };
 builder.Services.AddSingleton(resultQueueOptions);
 builder.Services.AddSingleton<ResultQueueProcessor>();
-builder.Services.AddHostedService<ResultQueueWorker>();
+if (hostedWorkerOptions.EnableResultQueueWorker)
+{
+    builder.Services.AddHostedService<ResultQueueWorker>();
+}
 builder.Services.AddHealthChecks()
     .AddCheck("live", () => HealthCheckResult.Healthy(), tags: new[] { "live" })
     .AddCheck<AwsDependenciesHealthCheck>("aws_dependencies", tags: new[] { "ready" });

@@ -12,6 +12,9 @@
   - `AwsStorage__OutboxTerminalTtlDays` (defaults to `7`)
   - `AwsStorage__EventTtlDays` (defaults to `30`)
   - `AwsStorage__ResultTtlDays` (defaults to `30`)
+- Hosted background workers default to enabled:
+  - `HostedWorkers__EnableOutboxWorker` (defaults to `true`)
+  - `HostedWorkers__EnableResultQueueWorker` (defaults to `true`)
 - Do not store production keys in `appsettings.json`.
 - Keep keys in an environment variable source or external secret manager.
 
@@ -76,3 +79,6 @@ curl -i \
   - Confirm key value exactly matches configured key (case-sensitive).
 - Unexpected `409`:
   - Retry the request after reloading current job state.
+- ECS API should stop polling queues after Lambda cutover:
+  - Set `HostedWorkers__EnableOutboxWorker=false`.
+  - Set `HostedWorkers__EnableResultQueueWorker=false`.

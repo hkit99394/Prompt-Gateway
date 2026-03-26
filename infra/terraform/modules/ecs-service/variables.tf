@@ -129,6 +129,12 @@ variable "worker_memory" {
   default     = 512
 }
 
+variable "disable_api_hosted_workers" {
+  description = "Disable API-hosted outbox and result queue workers when Lambda processing is active"
+  type        = bool
+  default     = false
+}
+
 variable "certificate_arn" {
   description = "ACM certificate ARN for HTTPS listener (optional; when empty, uses HTTP on port 80)"
   type        = string

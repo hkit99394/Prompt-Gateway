@@ -87,6 +87,7 @@ module "ecs_service" {
   results_bucket_name                    = module.s3.results_bucket_name
   api_desired_count                      = 1
   worker_desired_count                   = 1
+  disable_api_hosted_workers             = var.enable_lambda_processing
   api_cpu                                = 256
   api_memory                             = 512
   worker_cpu                             = 256

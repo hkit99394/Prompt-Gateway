@@ -1,6 +1,6 @@
 # Prompt Gateway – Terraform Infrastructure
 
-IaC for the Control Plane and Provider Worker (ECS Fargate, DynamoDB, SQS, S3, etc.).
+IaC for the Control Plane and Provider Worker (ECS Fargate, Lambda, DynamoDB, SQS, S3, etc.).
 
 > **Note:** Ensure modules are implemented per `docs/DEPLOYMENT_PLAN.md` (T-2.2 through T-2.8) before running `terraform apply`.
 
@@ -14,7 +14,8 @@ infra/terraform/
 │   ├── sqs/          # Dispatch, result, DLQ
 │   ├── s3/           # Prompts and results buckets
 │   ├── iam/          # Task roles and policies
-│   └── ecs-service/  # ECS cluster, task definitions, services
+│   ├── ecs-service/  # ECS cluster, task definitions, services
+│   └── lambda-processing/ # Lambda functions, event mappings, schedule
 └── environments/
     ├── dev/
     ├── staging/
@@ -40,6 +41,22 @@ terraform apply -var-file=dev.tfvars
 ```
 
 **Note:** `*.tfvars` files are gitignored. Copy from `*.tfvars.example` and never commit real `.tfvars`—they may contain secrets.
+
+## Lambda Packaging
+
+When `enable_lambda_processing` is enabled in an environment, Terraform expects these zip artifacts to exist:
+
+```bash
+./scripts/package-lambda-artifacts.sh
+```
+
+This produces:
+
+- `artifacts/provider-worker-lambda.zip`
+- `artifacts/control-plane-result-lambda.zip`
+- `artifacts/control-plane-outbox-lambda.zip`
+
+The environment variables `provider_lambda_package_path`, `result_lambda_package_path`, and `outbox_lambda_package_path` can override those defaults when needed.
 
 ## First-time backend setup
 

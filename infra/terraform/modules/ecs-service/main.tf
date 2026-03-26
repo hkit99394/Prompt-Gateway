@@ -203,7 +203,9 @@ resource "aws_ecs_task_definition" "control_plane_api" {
         { name = "AwsQueue__DispatchQueueUrl", value = var.dispatch_queue_url },
         { name = "AwsQueue__ResultQueueUrl", value = var.result_queue_url },
         { name = "AwsStorage__TableName", value = var.dynamodb_table_name },
-        { name = "AwsStorage__JobListIndexName", value = var.dynamodb_gsi_name }
+        { name = "AwsStorage__JobListIndexName", value = var.dynamodb_gsi_name },
+        { name = "HostedWorkers__EnableOutboxWorker", value = var.disable_api_hosted_workers ? "false" : "true" },
+        { name = "HostedWorkers__EnableResultQueueWorker", value = var.disable_api_hosted_workers ? "false" : "true" }
       ]
 
       secrets = [
