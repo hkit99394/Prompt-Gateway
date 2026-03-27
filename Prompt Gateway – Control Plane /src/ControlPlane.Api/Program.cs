@@ -24,8 +24,8 @@ builder.Services
 builder.Services.AddAuthorization();
 builder.Services.AddControlPlaneRuntime(builder.Configuration);
 
-// The HTTP control plane intentionally remains ECS-hosted for now; only the queue-processing
-// workers are switchable during the ECS-to-Lambda migration.
+// The HTTP control plane is still ECS-hosted today, but the next migration phases target a
+// Lambda-hosted HTTP edge after the queue-processing path is fully proven.
 var outboxOptions = new OutboxWorkerOptions
 {
     MaxMessagesPerCycle = int.TryParse(builder.Configuration["Outbox:MaxMessagesPerCycle"], out var outboxMaxMessages)

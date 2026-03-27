@@ -2,10 +2,10 @@
 
 ## Platform decision
 
-- The HTTP control plane remains on ECS/ALB.
+- The HTTP control plane is still on ECS/ALB today.
 - Lambda is the target runtime for queue-driven dispatch, provider execution, and result ingestion.
 - The API host keeps only the HTTP edge plus small control-plane coordination work such as post-accept continuation.
-- A future move to Lambda/API Gateway is not the current plan and would require a separate decision.
+- The next migration phases are expected to move the HTTP control plane to Lambda/API Gateway.
 
 ## Required configuration
 

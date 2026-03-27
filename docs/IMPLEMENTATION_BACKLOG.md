@@ -619,13 +619,170 @@ The HTTP API can remain on ECS or move to Lambda/API Gateway later, but that cho
 - The repo and docs reflect that decision clearly.
 - Any retained temporary architecture is called out explicitly.
 
-**Status:** Complete
+**Status:** Superseded
 
 **Completion notes**
 
-- The HTTP control plane is now explicitly documented as staying on ECS/ALB.
-- The repo docs call out Lambda as the target runtime for queue-driven processing and ECS as the retained HTTP edge.
-- The remaining ECS provider-worker service is called out as rollback-only infrastructure rather than accidental architecture drift.
+- The earlier “keep HTTP on ECS” decision served as a migration waypoint.
+- The current plan now reopens the HTTP-edge migration and treats Lambda/API Gateway as the next target once the worker-side rollout is fully proven.
+
+---
+
+## Phase 6 – Control Plane HTTP Preparation
+
+### PG-601 Shared HTTP host composition for ECS and Lambda
+
+- Primary owner: `control-plane-core`
+- Sidecar: `lambda-platform`
+- Priority: High
+- Dependencies: PG-401 through PG-403
+
+**Problem**
+
+The control-plane HTTP edge still assumes an ECS-hosted ASP.NET Core app entry point, which makes a Lambda HTTP migration harder than it needs to be.
+
+**Scope**
+
+- Extract shared API startup and service registration so ECS and Lambda hosts can use the same composition root.
+- Isolate host-specific concerns from the HTTP contract and orchestration logic.
+
+**Target files**
+
+- `Prompt Gateway – Control Plane /src/ControlPlane.Api/Program.cs`
+- `Prompt Gateway – Control Plane /src/ControlPlane.Aws/ControlPlaneRuntimeServiceCollectionExtensions.cs`
+- new Lambda host files as needed
+
+**Acceptance criteria**
+
+- The HTTP control plane can be started from both ECS and Lambda-oriented hosts using shared registration.
+- Host-specific bootstrapping is thin and explicit.
+
+### PG-602 Serverless-safe HTTP runtime behavior
+
+- Primary owner: `control-plane-core`
+- Sidecar: `release-verification`
+- Priority: High
+- Dependencies: PG-601
+
+**Problem**
+
+Health checks, post-accept continuation, and operational endpoints still assume a long-running HTTP host.
+
+**Scope**
+
+- Revisit readiness/liveness behavior for a Lambda HTTP edge.
+- Make post-accept continuation explicit for a fully serverless host.
+- Define how Swagger and operational endpoints should behave behind API Gateway.
+
+**Target files**
+
+- `Prompt Gateway – Control Plane /src/ControlPlane.Api/Program.cs`
+- `Prompt Gateway – Control Plane /src/ControlPlane.Api/Health/AwsDependenciesHealthCheck.cs`
+- `Prompt Gateway – Control Plane /src/ControlPlane.Api/README.md`
+
+**Acceptance criteria**
+
+- Lambda-hosted HTTP behavior is defined and tested.
+- No hidden dependency remains on ECS-only hosted behavior.
+
+---
+
+## Phase 7 – Control Plane Lambda Introduction
+
+### PG-701 Add Control Plane Lambda HTTP host
+
+- Primary owner: `lambda-platform`
+- Sidecar: `control-plane-core`
+- Priority: High
+- Dependencies: PG-601, PG-602
+
+**Scope**
+
+- Add a Lambda entry point for the HTTP control plane.
+- Keep ECS available while the Lambda edge is introduced in parallel.
+
+**Target files**
+
+- new Lambda host files for the Control Plane API
+- infrastructure modules and environment wiring as needed
+
+**Acceptance criteria**
+
+- The control plane API can run through Lambda in a non-prod environment.
+- ECS and Lambda HTTP hosts share the same API contract and core runtime wiring.
+
+### PG-702 Add API Gateway and HTTP-edge rollout verification
+
+- Primary owner: `lambda-platform`
+- Sidecar: `release-verification`
+- Priority: High
+- Dependencies: PG-701
+
+**Scope**
+
+- Add API Gateway integration and deployment wiring.
+- Extend smoke tests and rollout gates for the Lambda HTTP path.
+
+**Target files**
+
+- Terraform API/Lambda modules and environment wiring
+- `scripts/first-deploy-phase4.sh`
+- `scripts/smoke-test.sh`
+- deployment docs as needed
+
+**Acceptance criteria**
+
+- Dev and staging can verify the Lambda HTTP edge with the same release gates used for the worker-side migration.
+- Auth, routing, and result-fetch behavior remain compatible with the ECS edge.
+
+---
+
+## Phase 8 – HTTP Cutover And Final ECS Retirement
+
+### PG-801 Promote Control Plane HTTP traffic to Lambda
+
+- Primary owner: `lambda-platform`
+- Sidecar: `release-verification`
+- Priority: High
+- Dependencies: PG-701, PG-702
+
+**Scope**
+
+- Promote the Lambda HTTP edge through dev, staging, and prod.
+- Keep ECS rollback available until production cutover is proven.
+
+**Target files**
+
+- rollout scripts and docs
+- monitoring and deployment modules as needed
+
+**Acceptance criteria**
+
+- Production HTTP traffic can be served by the Lambda/API Gateway edge.
+- Rollback gates and evidence exist for the HTTP cutover.
+
+### PG-802 Retire ECS API and remaining ECS edge infrastructure
+
+- Primary owner: `lambda-platform`
+- Sidecar: `release-verification`
+- Priority: Medium
+- Dependencies: PG-501, PG-801
+
+**Scope**
+
+- Remove the ECS API service, ALB, and any edge-specific ECS infrastructure that is no longer required.
+- Update docs, deployment scripts, and monitoring to treat Lambda as the sole runtime.
+
+**Target files**
+
+- `infra/terraform/modules/ecs-service/main.tf`
+- `infra/terraform/README.md`
+- rollout scripts and docs as needed
+
+**Acceptance criteria**
+
+- The control plane and provider execution paths both run entirely without ECS.
+- The repo no longer treats ECS as an active runtime.
 
 ---
 
@@ -648,6 +805,12 @@ The HTTP API can remain on ECS or move to Lambda/API Gateway later, but that cho
 15. PG-403
 16. PG-501
 17. PG-502
+18. PG-601
+19. PG-602
+20. PG-701
+21. PG-702
+22. PG-801
+23. PG-802
 
 ## Recommended Milestone Gates
 
@@ -697,3 +860,24 @@ Complete:
 
 - PG-501
 - PG-502
+
+### Milestone G – HTTP edge ready for Lambda
+
+Complete:
+
+- PG-601
+- PG-602
+
+### Milestone H – Lambda HTTP path introduced
+
+Complete:
+
+- PG-701
+- PG-702
+
+### Milestone I – Full ECS retirement
+
+Complete:
+
+- PG-801
+- PG-802

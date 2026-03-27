@@ -25,7 +25,7 @@ The cleanest path is:
 ## Current decision
 
 - Queue-driven processing is moving to Lambda and is the intended steady-state execution path.
-- The HTTP control plane stays on ECS/ALB.
+- The HTTP control plane is still on ECS/ALB today, but it is no longer treated as the long-term final state.
 - The ECS provider-worker service remains in the repo as rollback infrastructure until Lambda mode is proven through a full promotion cycle, not because it is still the target architecture.
 
 ## What the repo shows today
@@ -244,13 +244,18 @@ Exit criteria:
 
 - A deliberate platform choice is made for the HTTP edge.
 
-Decision reached:
+Previous decision:
 
-- Keep the HTTP API on ECS/ALB.
+- Keep the HTTP API on ECS/ALB temporarily.
 - Reasoning:
   - predictable HTTP latency and simpler readiness semantics matter more here than removing the final container service
   - the API already has a small, stable operational footprint after queue workers are disabled in Lambda mode
   - API Gateway plus Lambda would add another migration with little immediate operational payoff compared with the worker/runtime split that is already delivering the main benefit
+
+Current update:
+
+- The project now intends to move the HTTP control plane to Lambda/API Gateway after the worker-side Lambda migration is proven.
+- The old ECS decision should now be read as a staging waypoint, not the final target.
 
 ### Phase 5: Decommission ECS
 
@@ -261,6 +266,57 @@ Work:
 - Remove ECS cluster, services, task definitions, ALB, and ECR repos if no longer needed.
 - Update deployment scripts and runbooks.
 - Update monitoring dashboards and alarms to Lambda metrics and SQS backlog metrics.
+
+### Phase 6: Prepare the HTTP control plane for Lambda
+
+Goal:
+Make the HTTP edge host-agnostic and ready for Lambda/API Gateway without changing the external contract yet.
+
+Work:
+
+- Extract the API bootstrap and host-specific concerns into reusable registration so ECS and Lambda entry points can share one composition path.
+- Remove or isolate any remaining ECS-only assumptions in health checks, middleware, and startup configuration.
+- Decide how post-accept continuation should behave when the HTTP host is fully serverless.
+- Add test coverage that proves the control plane can run without ECS-hosted background services.
+
+Exit criteria:
+
+- The control plane HTTP stack can be started from both ECS and Lambda-oriented hosts.
+- Host-specific behavior is explicit rather than hidden in `Program.cs`.
+
+### Phase 7: Introduce the Control Plane Lambda HTTP entry point
+
+Goal:
+Run the HTTP control plane through Lambda/API Gateway in parallel with the ECS edge.
+
+Work:
+
+- Add a Lambda host for the ASP.NET Core API.
+- Add API Gateway integration, routing, auth forwarding, and deployment configuration.
+- Revisit operational endpoints (`/health`, `/ready`, Swagger) for a Lambda-hosted edge.
+- Add rollout-specific smoke tests and verification steps for the Lambda HTTP path.
+
+Exit criteria:
+
+- The control plane API can serve live traffic through Lambda/API Gateway in a non-prod environment.
+- Contract and auth behavior match the ECS edge closely enough for cutover testing.
+
+### Phase 8: Cut over the HTTP edge and retire ECS
+
+Goal:
+Move production HTTP traffic to Lambda/API Gateway and retire the final ECS edge infrastructure.
+
+Work:
+
+- Promote the Lambda HTTP edge through dev, staging, and prod with evidence gates.
+- Keep rollback to the ECS edge available until production cutover is proven.
+- Remove the ECS API service, ALB, and any no-longer-needed ECR/runtime infrastructure.
+- Update deployment tooling and monitoring to treat Lambda as the sole runtime.
+
+Exit criteria:
+
+- Production HTTP traffic is served by Lambda/API Gateway.
+- ECS is no longer required for either worker or HTTP control-plane execution.
 
 ## Rollout gates
 
@@ -295,6 +351,7 @@ Rollback expectations:
   - at least one full staging-to-prod promotion cycle in Lambda mode succeeds
   - rollback steps are exercised or otherwise evidenced
   - promotion evidence is recorded alongside deployment notes
+- The HTTP control plane is still running on ECS today, but future phases now target Lambda/API Gateway for the HTTP edge as well.
 
 ## Main risks
 
