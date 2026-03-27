@@ -773,6 +773,7 @@ Health checks, post-accept continuation, and operational endpoints still assume 
 
 ### PG-801 Promote Control Plane HTTP traffic to Lambda
 
+- Status: In Progress
 - Primary owner: `lambda-platform`
 - Sidecar: `release-verification`
 - Priority: High
@@ -793,8 +794,15 @@ Health checks, post-accept continuation, and operational endpoints still assume 
 - Production HTTP traffic can be served by the Lambda/API Gateway edge.
 - Rollback gates and evidence exist for the HTTP cutover.
 
+**Completion notes so far**
+
+- `dev` can already serve the HTTP control plane through API Gateway/Lambda.
+- The default Phase 4 smoke path now targets the Lambda HTTP edge.
+- Lambda-edge verification now expects the ECS `control-plane-api` service to be scaled down, while ECS remains available for explicit rollback.
+
 ### PG-802 Retire ECS API and remaining ECS edge infrastructure
 
+- Status: Pending
 - Primary owner: `lambda-platform`
 - Sidecar: `release-verification`
 - Priority: Medium

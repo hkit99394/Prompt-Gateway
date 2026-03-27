@@ -5,10 +5,11 @@
 #
 # Optional env vars:
 #   - AWS_REGION: default us-east-1
+#   - HTTP_EDGE_MODE: lambda (default) or ecs
 #   - HEALTH_CHECK_BASE_URL / BASE_URL: forwarded to first-deploy-phase4.sh
 #   - API_KEY: forwarded to first-deploy-phase4.sh
 #   - SMOKE_INPUT_REF / SMOKE_PROMPT_BUCKET / SMOKE_PROMPT_TEXT / SMOKE_SKIP_PROMPT_UPLOAD
-#   - LAMBDA_RUNTIME / PROVIDER_LAMBDA_PACKAGE_PATH / RESULT_LAMBDA_PACKAGE_PATH / OUTBOX_LAMBDA_PACKAGE_PATH
+#   - LAMBDA_RUNTIME / PROVIDER_LAMBDA_PACKAGE_PATH / RESULT_LAMBDA_PACKAGE_PATH / OUTBOX_LAMBDA_PACKAGE_PATH / CONTROL_PLANE_HTTP_LAMBDA_PACKAGE_PATH
 #
 # Usage:
 #   ./scripts/promote-lambda-mode.sh staging
@@ -20,6 +21,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 REGION="${AWS_REGION:-us-east-1}"
+HTTP_EDGE_MODE="${HTTP_EDGE_MODE:-lambda}"
 TARGET_ENV="${1:-}"
 CHECK_STAGING=false
 SKIP_SMOKE=false
@@ -55,24 +57,24 @@ fi
 
 if [ "$TARGET_ENV" = "prod" ] && [ "$CHECK_STAGING" = true ]; then
   echo "Checking staging Lambda mode before prod promotion..."
-  ENV=staging AWS_REGION="$REGION" "$REPO_ROOT/scripts/set-processing-mode.sh" --mode lambda --verify-only
+  ENV=staging AWS_REGION="$REGION" HTTP_EDGE_MODE="$HTTP_EDGE_MODE" "$REPO_ROOT/scripts/set-processing-mode.sh" --mode lambda --verify-only
   echo ""
 fi
 
 echo "=== Promote Lambda Mode ==="
-echo "Target environment: $TARGET_ENV  Region: $REGION"
+echo "Target environment: $TARGET_ENV  Region: $REGION  HTTP edge mode: $HTTP_EDGE_MODE"
 echo ""
 
-ENV="$TARGET_ENV" AWS_REGION="$REGION" "$REPO_ROOT/scripts/first-deploy-phase3.sh" --processing-mode lambda
+ENV="$TARGET_ENV" AWS_REGION="$REGION" HTTP_EDGE_MODE="$HTTP_EDGE_MODE" "$REPO_ROOT/scripts/first-deploy-phase3.sh" --processing-mode lambda
 echo ""
 
 if [ "$SKIP_VERIFY" = false ]; then
-  ENV="$TARGET_ENV" AWS_REGION="$REGION" "$REPO_ROOT/scripts/set-processing-mode.sh" --mode lambda --verify-only
+  ENV="$TARGET_ENV" AWS_REGION="$REGION" HTTP_EDGE_MODE="$HTTP_EDGE_MODE" "$REPO_ROOT/scripts/set-processing-mode.sh" --mode lambda --verify-only
   echo ""
 fi
 
 if [ "$SKIP_SMOKE" = false ]; then
-  ENV="$TARGET_ENV" AWS_REGION="$REGION" "$REPO_ROOT/scripts/first-deploy-phase4.sh"
+  ENV="$TARGET_ENV" AWS_REGION="$REGION" HTTP_EDGE_MODE="$HTTP_EDGE_MODE" "$REPO_ROOT/scripts/first-deploy-phase4.sh"
   echo ""
 fi
 

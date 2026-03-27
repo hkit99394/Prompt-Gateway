@@ -20,6 +20,8 @@
 #   - IMAGE_TAG: immutable tag for pushed images (default: current git SHA, or UTC timestamp fallback)
 #   - AWS_REGION: default us-east-1
 #   - PROCESSING_MODE: lambda (default) or ecs
+#   - HTTP_EDGE_MODE: lambda (default) or ecs
+#   - DEPLOY_ECS_API_SERVICE: auto (default), true, or false
 #
 # Usage: ./scripts/first-deploy-phase3.sh [--processing-mode lambda|ecs] [--build-only] [--skip-verify]
 
@@ -30,6 +32,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV="${ENV:-dev}"
 REGION="${AWS_REGION:-us-east-1}"
 PROCESSING_MODE="${PROCESSING_MODE:-lambda}"
+HTTP_EDGE_MODE="${HTTP_EDGE_MODE:-lambda}"
+DEPLOY_ECS_API_SERVICE="${DEPLOY_ECS_API_SERVICE:-auto}"
 BUILD_ONLY=false
 SKIP_VERIFY=false
 DEFAULT_IMAGE_TAG="$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD 2>/dev/null || date -u +%Y%m%d%H%M%S)"
@@ -65,8 +69,26 @@ if [ "$PROCESSING_MODE" != "ecs" ] && [ "$PROCESSING_MODE" != "lambda" ]; then
   exit 1
 fi
 
+if [ "$HTTP_EDGE_MODE" != "ecs" ] && [ "$HTTP_EDGE_MODE" != "lambda" ]; then
+  echo "ERROR: HTTP_EDGE_MODE must be 'ecs' or 'lambda'."
+  exit 1
+fi
+
+if [ "$DEPLOY_ECS_API_SERVICE" != "auto" ] && [ "$DEPLOY_ECS_API_SERVICE" != "true" ] && [ "$DEPLOY_ECS_API_SERVICE" != "false" ]; then
+  echo "ERROR: DEPLOY_ECS_API_SERVICE must be 'auto', 'true', or 'false'."
+  exit 1
+fi
+
+if [ "$DEPLOY_ECS_API_SERVICE" = "auto" ]; then
+  if [ "$PROCESSING_MODE" = "lambda" ] && [ "$HTTP_EDGE_MODE" = "lambda" ]; then
+    DEPLOY_ECS_API_SERVICE="false"
+  else
+    DEPLOY_ECS_API_SERVICE="true"
+  fi
+fi
+
 echo "=== First-deploy Phase 3: Application deploy (T-5.3) ==="
-echo "Environment: $ENV  Region: $REGION  Image tag: $IMAGE_TAG  Processing mode: $PROCESSING_MODE"
+echo "Environment: $ENV  Region: $REGION  Image tag: $IMAGE_TAG  Processing mode: $PROCESSING_MODE  HTTP edge: $HTTP_EDGE_MODE  Deploy ECS API: $DEPLOY_ECS_API_SERVICE"
 echo ""
 
 # Prerequisite: Docker installed and daemon running
@@ -141,7 +163,7 @@ else
   echo ""
   echo "T-5.3.3: Switch processing mode to Lambda"
 fi
-"$REPO_ROOT/scripts/set-processing-mode.sh" "${MODE_SWITCH_ARGS[@]}"
+HTTP_EDGE_MODE="$HTTP_EDGE_MODE" "$REPO_ROOT/scripts/set-processing-mode.sh" "${MODE_SWITCH_ARGS[@]}"
 
 # --- T-5.3.4: Create/update ECS task definitions with correct image URIs (and dev → SSM secrets) ---
 echo ""
@@ -163,15 +185,19 @@ else
   WORKER_JQ_IMAGE=".taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = \"$WORKER_IMAGE\""
 fi
 
-aws ecs describe-task-definition --task-definition "$TASK_DEF_API" --region "$REGION" \
-  | jq "$API_JQ_IMAGE" > "$API_TASKDEF_FILE"
+if [ "$DEPLOY_ECS_API_SERVICE" = "true" ]; then
+  aws ecs describe-task-definition --task-definition "$TASK_DEF_API" --region "$REGION" \
+    | jq "$API_JQ_IMAGE" > "$API_TASKDEF_FILE"
+fi
 
 if [ "$PROCESSING_MODE" = "ecs" ]; then
   aws ecs describe-task-definition --task-definition "$TASK_DEF_WORKER" --region "$REGION" \
     | jq "$WORKER_JQ_IMAGE" > "$WORKER_TASKDEF_FILE"
 fi
 
-aws ecs register-task-definition --cli-input-json "file://$API_TASKDEF_FILE" --region "$REGION" > /dev/null
+if [ "$DEPLOY_ECS_API_SERVICE" = "true" ]; then
+  aws ecs register-task-definition --cli-input-json "file://$API_TASKDEF_FILE" --region "$REGION" > /dev/null
+fi
 if [ "$PROCESSING_MODE" = "ecs" ]; then
   aws ecs register-task-definition --cli-input-json "file://$WORKER_TASKDEF_FILE" --region "$REGION" > /dev/null
 fi
@@ -180,13 +206,17 @@ echo "  OK: Task definitions registered"
 # --- T-5.3.5 & T-5.3.6: Deploy services ---
 echo ""
 echo "T-5.3.5: Deploy Control Plane API service"
-aws ecs update-service \
-  --cluster "$CLUSTER" \
-  --service "$API_SERVICE" \
-  --task-definition "$TASK_DEF_API" \
-  --force-new-deployment \
-  --region "$REGION" \
-  --no-cli-pager --query 'service.serviceName' --output text
+if [ "$DEPLOY_ECS_API_SERVICE" = "true" ]; then
+  aws ecs update-service \
+    --cluster "$CLUSTER" \
+    --service "$API_SERVICE" \
+    --task-definition "$TASK_DEF_API" \
+    --force-new-deployment \
+    --region "$REGION" \
+    --no-cli-pager --query 'service.serviceName' --output text
+else
+  echo "  Skipping ECS control-plane-api redeploy so the warm fallback edge stays on its current revision"
+fi
 
 if [ "$PROCESSING_MODE" = "ecs" ]; then
   echo ""
@@ -211,7 +241,7 @@ else
     --cluster "$CLUSTER" \
     --services "$API_SERVICE" "$WORKER_SERVICE" \
     --region "$REGION"
-  "$REPO_ROOT/scripts/set-processing-mode.sh" --mode "$PROCESSING_MODE" --verify-only
+  HTTP_EDGE_MODE="$HTTP_EDGE_MODE" "$REPO_ROOT/scripts/set-processing-mode.sh" --mode "$PROCESSING_MODE" --verify-only
 fi
 
 echo ""

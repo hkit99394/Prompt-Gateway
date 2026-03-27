@@ -12,6 +12,7 @@
 # Optional env vars:
 #   - ENV: dev (default), staging, or prod
 #   - HTTP_EDGE_MODE: lambda (default) or ecs
+#   - VERIFY_ECS_HTTP_STATE: when HTTP_EDGE_MODE=lambda, require the ECS API service to be off; when HTTP_EDGE_MODE=ecs, require it to be on (default: true)
 #   - BASE_URL: override (e.g. https://api.example.com); otherwise derived from ALB
 #   - API_KEY: override; otherwise fetched from SSM (dev) or Secrets Manager (staging/prod)
 #   - HEALTH_CHECK_BASE_URL: same as BASE_URL; used when set to avoid --insecure for custom domains
@@ -35,6 +36,7 @@ USE_INSECURE=""
 INPUT_REF="${SMOKE_INPUT_REF:-prompts/smoke-test.txt}"
 SMOKE_PROMPT_TEXT="${SMOKE_PROMPT_TEXT:-Reply with exactly: smoke test ok}"
 SMOKE_SKIP_PROMPT_UPLOAD="${SMOKE_SKIP_PROMPT_UPLOAD:-false}"
+VERIFY_ECS_HTTP_STATE="${VERIFY_ECS_HTTP_STATE:-true}"
 
 echo "=== First-deploy Phase 4: Smoke tests (T-5.4) ==="
 echo "Environment: $ENV  Region: $REGION"
@@ -132,11 +134,63 @@ if [ "$SMOKE_SKIP_PROMPT_UPLOAD" != "true" ]; then
   echo ""
 fi
 
+verify_ecs_http_state() {
+  if [ "$VERIFY_ECS_HTTP_STATE" != "true" ]; then
+    return
+  fi
+
+  local ecs_status
+  ecs_status=$(aws ecs describe-services \
+    --cluster "prompt-gateway-${ENV}" \
+    --services control-plane-api provider-worker \
+    --region "$REGION" \
+    --query 'services[].{name:serviceName,desired:desiredCount,running:runningCount}' \
+    --output json 2>/dev/null || true)
+
+  if [ -z "$ecs_status" ] || [ "$ecs_status" = "[]" ]; then
+    echo "FAIL: Could not inspect ECS fallback services after Lambda-edge smoke test."
+    exit 1
+  fi
+
+  local api_desired
+  local api_running
+  local worker_desired
+  local worker_running
+  api_desired=$(echo "$ecs_status" | jq -r '.[] | select(.name=="control-plane-api") | .desired // empty')
+  api_running=$(echo "$ecs_status" | jq -r '.[] | select(.name=="control-plane-api") | .running // empty')
+  worker_desired=$(echo "$ecs_status" | jq -r '.[] | select(.name=="provider-worker") | .desired // empty')
+  worker_running=$(echo "$ecs_status" | jq -r '.[] | select(.name=="provider-worker") | .running // empty')
+
+  if [ -z "$api_desired" ] || [ -z "$api_running" ]; then
+    echo "FAIL: ECS control-plane-api service metadata is missing."
+    exit 1
+  fi
+
+  if [ "$HTTP_EDGE_MODE" = "lambda" ]; then
+    if [ "$api_desired" != "0" ] || [ "$api_running" != "0" ]; then
+      echo "FAIL: ECS control-plane-api should be off while Lambda HTTP edge is active (desired=$api_desired running=$api_running)."
+      exit 1
+    fi
+    echo "ECS HTTP state check: control-plane-api desired=$api_desired running=$api_running"
+  else
+    if [ "$api_desired" -lt 1 ] || [ "$api_running" -lt 1 ]; then
+      echo "FAIL: ECS control-plane-api should be on while ECS HTTP edge is active (desired=$api_desired running=$api_running)."
+      exit 1
+    fi
+    echo "ECS HTTP state check: control-plane-api desired=$api_desired running=$api_running"
+  fi
+  if [ -n "$worker_desired" ] && [ -n "$worker_running" ]; then
+    echo "ECS worker rollback state: provider-worker desired=$worker_desired running=$worker_running"
+  fi
+}
+
 # T-5.4.1 – T-5.4.5: run smoke-test.sh (GET /health, GET /ready, POST /jobs, poll, GET /result)
 cd "$REPO_ROOT"
 chmod +x scripts/smoke-test.sh
 if [ -n "$USE_INSECURE" ]; then
-  SMOKE_INPUT_REF="$INPUT_REF" exec ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY" "$USE_INSECURE"
+  SMOKE_INPUT_REF="$INPUT_REF" ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY" "$USE_INSECURE"
 else
-  SMOKE_INPUT_REF="$INPUT_REF" exec ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY"
+  SMOKE_INPUT_REF="$INPUT_REF" ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY"
 fi
+
+verify_ecs_http_state

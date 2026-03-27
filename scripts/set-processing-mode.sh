@@ -11,10 +11,12 @@
 # Optional env vars:
 #   - ENV: dev (default), staging, or prod
 #   - AWS_REGION: default us-east-1
+#   - HTTP_EDGE_MODE: lambda (default) or ecs
 #   - LAMBDA_RUNTIME: override managed runtime for Lambda mode
 #   - PROVIDER_LAMBDA_PACKAGE_PATH: override provider zip path
 #   - RESULT_LAMBDA_PACKAGE_PATH: override result zip path
 #   - OUTBOX_LAMBDA_PACKAGE_PATH: override outbox zip path
+#   - CONTROL_PLANE_HTTP_LAMBDA_PACKAGE_PATH: override HTTP API Lambda zip path
 #   - SMOKE_TEST_INSECURE=true: pass --insecure when running the optional smoke-test gate
 #
 # Usage:
@@ -28,6 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV="${ENV:-dev}"
 REGION="${AWS_REGION:-us-east-1}"
+HTTP_EDGE_MODE="${HTTP_EDGE_MODE:-lambda}"
 MODE=""
 PLAN_ONLY=false
 SKIP_PACKAGE=false
@@ -77,17 +80,29 @@ if [ "$MODE" != "ecs" ] && [ "$MODE" != "lambda" ]; then
   exit 1
 fi
 
+if [ "$HTTP_EDGE_MODE" != "ecs" ] && [ "$HTTP_EDGE_MODE" != "lambda" ]; then
+  echo "ERROR: HTTP_EDGE_MODE must be 'ecs' or 'lambda'."
+  exit 1
+fi
+
 TF_DIR="$REPO_ROOT/infra/terraform/environments/$ENV"
 TFVARS_FILE="$TF_DIR/${ENV}.tfvars"
 ENABLE_LAMBDA_PROCESSING="false"
+ENABLE_LAMBDA_HTTP_API="false"
 
 if [ "$MODE" = "lambda" ]; then
   ENABLE_LAMBDA_PROCESSING="true"
 fi
 
+if [ "$HTTP_EDGE_MODE" = "lambda" ]; then
+  ENABLE_LAMBDA_HTTP_API="true"
+fi
+
 PROVIDER_LAMBDA_NAME="prompt-gateway-${ENV}-provider-worker"
 RESULT_LAMBDA_NAME="prompt-gateway-${ENV}-result-ingestion"
 OUTBOX_LAMBDA_NAME="prompt-gateway-${ENV}-outbox-dispatch"
+CONTROL_PLANE_HTTP_LAMBDA_NAME="prompt-gateway-${ENV}-control-plane-http"
+CONTROL_PLANE_HTTP_API_NAME="prompt-gateway-${ENV}-control-plane-http"
 OUTBOX_RULE_NAME="prompt-gateway-${ENV}-outbox-dispatch"
 CLUSTER_NAME="prompt-gateway-${ENV}"
 API_SERVICE_NAME="control-plane-api"
@@ -115,19 +130,38 @@ event_rule_exists() {
   aws events describe-rule --name "$rule_name" --region "$REGION" >/dev/null 2>&1
 }
 
+http_api_id() {
+  aws apigatewayv2 get-apis \
+    --region "$REGION" \
+    --query "Items[?Name=='${CONTROL_PLANE_HTTP_API_NAME}'].ApiId | [0]" \
+    --output text 2>/dev/null || true
+}
+
+http_api_exists() {
+  local api_id
+  api_id="$(http_api_id)"
+  [ -n "$api_id" ] && [ "$api_id" != "None" ]
+}
+
 run_smoke_test_gate() {
   local smoke_args=()
 
-  echo "Running smoke-test gate for $MODE mode..."
+  echo "Running smoke-test gate for processing=$MODE http_edge=$HTTP_EDGE_MODE..."
   if [ "${SMOKE_TEST_INSECURE:-false}" = "true" ]; then
     smoke_args+=("--insecure")
   fi
 
-  ENV="$ENV" AWS_REGION="$REGION" "$REPO_ROOT/scripts/first-deploy-phase4.sh" "${smoke_args[@]}"
+  if [ ${#smoke_args[@]} -gt 0 ]; then
+    ENV="$ENV" AWS_REGION="$REGION" HTTP_EDGE_MODE="$HTTP_EDGE_MODE" "$REPO_ROOT/scripts/first-deploy-phase4.sh" "${smoke_args[@]}"
+  else
+    ENV="$ENV" AWS_REGION="$REGION" HTTP_EDGE_MODE="$HTTP_EDGE_MODE" "$REPO_ROOT/scripts/first-deploy-phase4.sh"
+  fi
 }
 
 verify_mode() {
   local api_task_definition
+  local api_desired_count
+  local api_running_count
   local api_outbox_enabled
   local api_result_enabled
   local worker_desired_count
@@ -145,6 +179,18 @@ verify_mode() {
     --services "$API_SERVICE_NAME" \
     --region "$REGION" \
     --query 'services[0].taskDefinition' \
+    --output text)
+  api_desired_count=$(aws ecs describe-services \
+    --cluster "$CLUSTER_NAME" \
+    --services "$API_SERVICE_NAME" \
+    --region "$REGION" \
+    --query 'services[0].desiredCount' \
+    --output text)
+  api_running_count=$(aws ecs describe-services \
+    --cluster "$CLUSTER_NAME" \
+    --services "$API_SERVICE_NAME" \
+    --region "$REGION" \
+    --query 'services[0].runningCount' \
     --output text)
 
   api_outbox_enabled=$(aws ecs describe-task-definition \
@@ -225,49 +271,85 @@ verify_mode() {
     fi
 
     echo "  OK: Lambda processing is active and ECS queue pollers are off"
+  else
+    if [ "$api_outbox_enabled" != "true" ]; then
+      echo "FAIL: API outbox worker is not enabled for ECS mode (value=$api_outbox_enabled)"
+      exit 1
+    fi
+    if [ "$api_result_enabled" != "true" ]; then
+      echo "FAIL: API result queue worker is not enabled for ECS mode (value=$api_result_enabled)"
+      exit 1
+    fi
+    if [ "$worker_desired_count" = "0" ]; then
+      echo "FAIL: Provider ECS worker desired count is zero in ECS mode"
+      exit 1
+    fi
+    if [ "$worker_running_count" = "0" ]; then
+      echo "FAIL: Provider ECS worker has no running tasks in ECS mode"
+      exit 1
+    fi
+    if lambda_function_exists "$PROVIDER_LAMBDA_NAME"; then
+      echo "FAIL: Provider Lambda function still exists in ECS mode"
+      exit 1
+    fi
+    if lambda_function_exists "$RESULT_LAMBDA_NAME"; then
+      echo "FAIL: Result Lambda function still exists in ECS mode"
+      exit 1
+    fi
+    if lambda_function_exists "$OUTBOX_LAMBDA_NAME"; then
+      echo "FAIL: Outbox Lambda function still exists in ECS mode"
+      exit 1
+    fi
+    if event_rule_exists "$OUTBOX_RULE_NAME"; then
+      echo "FAIL: Outbox schedule rule still exists in ECS mode"
+      exit 1
+    fi
+
+    echo "  OK: ECS processing is active and Lambda processing is off"
+  fi
+
+  if [ "$HTTP_EDGE_MODE" = "lambda" ]; then
+    if [ "$api_desired_count" != "0" ]; then
+      echo "FAIL: ECS control-plane-api desired count is not zero while HTTP edge mode is lambda (desired=$api_desired_count)"
+      exit 1
+    fi
+    if [ "$api_running_count" != "0" ]; then
+      echo "FAIL: ECS control-plane-api still has running tasks while HTTP edge mode is lambda (running=$api_running_count)"
+      exit 1
+    fi
+    if ! lambda_function_exists "$CONTROL_PLANE_HTTP_LAMBDA_NAME"; then
+      echo "FAIL: Control Plane HTTP Lambda function is missing"
+      exit 1
+    fi
+    if ! http_api_exists; then
+      echo "FAIL: Control Plane HTTP API Gateway edge is missing"
+      exit 1
+    fi
+
+    echo "  OK: Lambda HTTP edge is active and ECS HTTP service is off"
     return
   fi
 
-  if [ "$api_outbox_enabled" != "true" ]; then
-    echo "FAIL: API outbox worker is not enabled for ECS mode (value=$api_outbox_enabled)"
+  if [ "$api_desired_count" = "0" ] || [ "$api_running_count" = "0" ]; then
+    echo "FAIL: ECS control-plane-api service is not active for HTTP edge mode ecs (desired=$api_desired_count running=$api_running_count)"
     exit 1
   fi
-  if [ "$api_result_enabled" != "true" ]; then
-    echo "FAIL: API result queue worker is not enabled for ECS mode (value=$api_result_enabled)"
+  if lambda_function_exists "$CONTROL_PLANE_HTTP_LAMBDA_NAME"; then
+    echo "FAIL: Control Plane HTTP Lambda function still exists while HTTP edge mode is ecs"
     exit 1
   fi
-  if [ "$worker_desired_count" = "0" ]; then
-    echo "FAIL: Provider ECS worker desired count is zero in ECS mode"
-    exit 1
-  fi
-  if [ "$worker_running_count" = "0" ]; then
-    echo "FAIL: Provider ECS worker has no running tasks in ECS mode"
-    exit 1
-  fi
-  if lambda_function_exists "$PROVIDER_LAMBDA_NAME"; then
-    echo "FAIL: Provider Lambda function still exists in ECS mode"
-    exit 1
-  fi
-  if lambda_function_exists "$RESULT_LAMBDA_NAME"; then
-    echo "FAIL: Result Lambda function still exists in ECS mode"
-    exit 1
-  fi
-  if lambda_function_exists "$OUTBOX_LAMBDA_NAME"; then
-    echo "FAIL: Outbox Lambda function still exists in ECS mode"
-    exit 1
-  fi
-  if event_rule_exists "$OUTBOX_RULE_NAME"; then
-    echo "FAIL: Outbox schedule rule still exists in ECS mode"
+  if http_api_exists; then
+    echo "FAIL: Control Plane HTTP API Gateway edge still exists while HTTP edge mode is ecs"
     exit 1
   fi
 
-  echo "  OK: ECS processing is active and Lambda processing is off"
+  echo "  OK: ECS HTTP edge is active and Lambda HTTP edge is off"
 }
 
 require_env_dir
 
 echo "=== Processing mode switch ==="
-echo "Environment: $ENV  Region: $REGION  Mode: $MODE"
+echo "Environment: $ENV  Region: $REGION  Processing mode: $MODE  HTTP edge mode: $HTTP_EDGE_MODE"
 echo ""
 
 if [ "$VERIFY_ONLY" = true ]; then
@@ -278,7 +360,7 @@ if [ "$VERIFY_ONLY" = true ]; then
   exit 0
 fi
 
-if [ "$MODE" = "lambda" ] && [ "$SKIP_PACKAGE" = false ]; then
+if { [ "$MODE" = "lambda" ] || [ "$HTTP_EDGE_MODE" = "lambda" ]; } && [ "$SKIP_PACKAGE" = false ]; then
   echo "Packaging Lambda artifacts..."
   "$REPO_ROOT/scripts/package-lambda-artifacts.sh"
   echo ""
@@ -294,10 +376,11 @@ PLAN_ARGS=(
   plan
   "-var-file=${ENV}.tfvars"
   "-var=enable_lambda_processing=${ENABLE_LAMBDA_PROCESSING}"
+  "-var=enable_lambda_http_api=${ENABLE_LAMBDA_HTTP_API}"
   -out=tfplan
 )
 
-if [ "$MODE" = "lambda" ]; then
+if [ "$MODE" = "lambda" ] || [ "$HTTP_EDGE_MODE" = "lambda" ]; then
   if [ -n "${LAMBDA_RUNTIME:-}" ]; then
     PLAN_ARGS+=("-var=lambda_runtime=${LAMBDA_RUNTIME}")
   fi
@@ -309,6 +392,9 @@ if [ "$MODE" = "lambda" ]; then
   fi
   if [ -n "${OUTBOX_LAMBDA_PACKAGE_PATH:-}" ]; then
     PLAN_ARGS+=("-var=outbox_lambda_package_path=${OUTBOX_LAMBDA_PACKAGE_PATH}")
+  fi
+  if [ -n "${CONTROL_PLANE_HTTP_LAMBDA_PACKAGE_PATH:-}" ]; then
+    PLAN_ARGS+=("-var=control_plane_http_lambda_package_path=${CONTROL_PLANE_HTTP_LAMBDA_PACKAGE_PATH}")
   fi
 fi
 

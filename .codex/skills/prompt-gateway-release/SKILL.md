@@ -34,6 +34,7 @@ For this repo, `first-deploy-phase3.sh` defaults to:
 - `ENV=dev`
 - `AWS_REGION=us-east-1`
 - `PROCESSING_MODE=lambda`
+- `HTTP_EDGE_MODE=lambda`
 
 4. Treat Phase 3 and Phase 4 as one verification chain.
 - Run Phase 3 first.
@@ -48,7 +49,7 @@ For this repo, `first-deploy-phase3.sh` defaults to:
 6. Keep the rollback story visible.
 - Lambda mode is the target runtime for queue-driven processing.
 - The ECS provider worker remains rollback infrastructure until the project explicitly retires it.
-- The HTTP control plane remains on ECS/ALB.
+- The ECS HTTP edge may remain warm as rollback even when the Lambda HTTP edge is the active smoke-test target.
 
 ## Commands
 
@@ -64,6 +65,7 @@ Use the project scripts directly:
 ## Notes
 
 - Phase 3 packages Lambda artifacts and applies Terraform changes when Lambda mode is selected.
+- In the default Lambda-edge flow, Phase 3 preserves the warm ECS `control-plane-api` service instead of redeploying it.
 - Phase 4 uploads the smoke prompt fixture by default and resolves the API key from SSM in `dev` or Secrets Manager in `staging` and `prod`.
 - If a smoke test stalls in `Dispatched`, inspect the outbox Lambda, provider Lambda, result-ingestion Lambda, and the dispatch/result queues before assuming the provider call failed.
 - When asked to commit after a successful deploy, include the deploy verification result in the final response.

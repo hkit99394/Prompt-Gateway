@@ -321,6 +321,13 @@ Work:
 - Remove the ECS API service, ALB, and any no-longer-needed ECR/runtime infrastructure.
 - Update deployment tooling and monitoring to treat Lambda as the sole runtime.
 
+Current direction:
+
+- HTTP traffic promotion to Lambda is in scope.
+- ECS HTTP and ECS provider-worker infrastructure remain retained as rollback paths unless they are explicitly retired in a later step.
+- When the Lambda HTTP edge is active, the ECS `control-plane-api` service is now expected to scale to zero rather than remain warm.
+- Rollback still means switching the HTTP edge mode back to ECS, not keeping both edges hot by default.
+
 Exit criteria:
 
 - Production HTTP traffic is served by Lambda/API Gateway.

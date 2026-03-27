@@ -94,7 +94,7 @@ module "ecs_service" {
   results_bucket_name                    = module.s3.results_bucket_name
   api_image_tag                          = var.api_image_tag
   worker_image_tag                       = var.worker_image_tag
-  api_desired_count                      = 2
+  api_desired_count                      = var.enable_lambda_http_api ? 0 : 2
   worker_desired_count                   = 2
   disable_api_hosted_workers             = var.enable_lambda_processing
   disable_provider_worker_service        = var.enable_lambda_processing
