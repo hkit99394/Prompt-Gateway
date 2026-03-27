@@ -22,6 +22,12 @@ The cleanest path is:
 2. Split background processing out of the ASP.NET Core API host.
 3. Decide whether the HTTP control plane should also move to Lambda or stay as a small container service.
 
+## Current decision
+
+- Queue-driven processing is moving to Lambda and is the intended steady-state execution path.
+- The HTTP control plane stays on ECS/ALB.
+- The ECS provider-worker service remains in the repo as rollback infrastructure until Lambda mode is proven through a full promotion cycle, not because it is still the target architecture.
+
 ## What the repo shows today
 
 ### Control plane API
@@ -238,6 +244,14 @@ Exit criteria:
 
 - A deliberate platform choice is made for the HTTP edge.
 
+Decision reached:
+
+- Keep the HTTP API on ECS/ALB.
+- Reasoning:
+  - predictable HTTP latency and simpler readiness semantics matter more here than removing the final container service
+  - the API already has a small, stable operational footprint after queue workers are disabled in Lambda mode
+  - API Gateway plus Lambda would add another migration with little immediate operational payoff compared with the worker/runtime split that is already delivering the main benefit
+
 ### Phase 5: Decommission ECS
 
 Only after all traffic and background work have moved.
@@ -273,6 +287,14 @@ Rollback expectations:
 
 - If verification fails, stop the promotion immediately.
 - Switch back to ECS mode, rerun `--verify-only --run-smoke-test`, and attach the failing smoke-test and alarm evidence to the deployment record.
+
+## Cleanup status
+
+- The ECS provider-worker runtime is not retired yet.
+- Completion condition:
+  - at least one full staging-to-prod promotion cycle in Lambda mode succeeds
+  - rollback steps are exercised or otherwise evidenced
+  - promotion evidence is recorded alongside deployment notes
 
 ## Main risks
 

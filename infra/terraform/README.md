@@ -66,6 +66,7 @@ Enabling Lambda processing also changes the ECS side of the system:
 - the ECS provider worker service is scaled to `0`
 - SQS processing moves to the Lambda event source mappings and the scheduled outbox Lambda
 - ECS mode remains a supported fallback via `./scripts/set-processing-mode.sh --mode ecs`
+- the ECS provider worker infrastructure is retained intentionally as rollback-only infrastructure until a full staging-to-prod Lambda promotion cycle is complete
 
 ## Promotion Flow
 
@@ -83,6 +84,12 @@ Use:
 ```
 
 This keeps ECS mode available as a rollback path while verifying that Lambda mode is active and smoke tests pass in each environment.
+
+## Current platform decision
+
+- The HTTP Control Plane API stays on ECS/ALB.
+- Lambda is the chosen runtime for provider execution, result ingestion, and scheduled outbox dispatch.
+- Removing the ECS provider-worker service from Terraform is deferred until promotion evidence exists beyond `dev`.
 
 ## First-time backend setup
 

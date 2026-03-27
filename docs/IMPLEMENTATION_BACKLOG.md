@@ -583,6 +583,14 @@ Monitoring currently favors ECS and generic DLQ visibility more than Lambda runt
 - Lambda provider path is the only active provider execution runtime.
 - Rollback evidence and migration confidence are documented before removal.
 
+**Status:** Pending
+
+**Completion notes**
+
+- Dev Lambda mode is deployed and verified.
+- The ECS provider-worker infrastructure is intentionally still present as rollback-only infrastructure.
+- This ticket stays open until Lambda mode completes at least one full staging-to-prod promotion cycle with recorded rollback evidence.
+
 ### PG-502 Final HTTP control-plane platform decision
 
 - Primary owner: `control-plane-core`
@@ -610,6 +618,14 @@ The HTTP API can remain on ECS or move to Lambda/API Gateway later, but that cho
 - A platform decision is documented.
 - The repo and docs reflect that decision clearly.
 - Any retained temporary architecture is called out explicitly.
+
+**Status:** Complete
+
+**Completion notes**
+
+- The HTTP control plane is now explicitly documented as staying on ECS/ALB.
+- The repo docs call out Lambda as the target runtime for queue-driven processing and ECS as the retained HTTP edge.
+- The remaining ECS provider-worker service is called out as rollback-only infrastructure rather than accidental architecture drift.
 
 ---
 

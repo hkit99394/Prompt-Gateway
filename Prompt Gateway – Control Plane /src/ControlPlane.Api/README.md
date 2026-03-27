@@ -1,5 +1,12 @@
 # ControlPlane.Api Operations Runbook
 
+## Platform decision
+
+- The HTTP control plane remains on ECS/ALB.
+- Lambda is the target runtime for queue-driven dispatch, provider execution, and result ingestion.
+- The API host keeps only the HTTP edge plus small control-plane coordination work such as post-accept continuation.
+- A future move to Lambda/API Gateway is not the current plan and would require a separate decision.
+
 ## Required configuration
 
 - Configure at least one API key using one of:
@@ -92,3 +99,5 @@ curl -i \
   - Set `HostedWorkers__EnablePostAcceptResumeWorker=false` if you want all post-accept continuation to be manual during debugging.
   - Set `HostedWorkers__EnableOutboxWorker=false`.
   - Set `HostedWorkers__EnableResultQueueWorker=false`.
+- ECS provider-worker retirement is not complete yet:
+  - Keep the provider ECS service as a rollback path until Lambda mode is proven through a full staging-to-prod promotion cycle with recorded rollback evidence.

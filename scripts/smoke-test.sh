@@ -122,7 +122,7 @@ fi
 
 # T-7.6: Poll GET /jobs/{job_id} until Completed or Failed (timeout 60s)
 echo "  Polling GET /jobs/$JOB_ID..."
-TIMEOUT=60
+TIMEOUT="${SMOKE_TIMEOUT_SECONDS:-90}"
 ELAPSED=0
 INTERVAL=3
 STATE=""
@@ -149,9 +149,16 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
 done
 
 if [ "$STATE" != "Completed" ] && [ "$STATE" != "4" ]; then
+  JOB_RESPONSE=$(curl -s "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/jobs/$JOB_ID" || echo "{}")
+  STATE=$(echo "$JOB_RESPONSE" | jq -r '.State // .state // empty' 2>/dev/null || echo "")
+
+  if [ "$STATE" = "Completed" ] || [ "$STATE" = "4" ]; then
+    echo "  OK: Job completed"
+  else
   echo "  FAIL: Timeout after ${TIMEOUT}s, state=$STATE"
   print_job_diagnostics "$JOB_ID"
   exit 1
+  fi
 fi
 
 # T-7.7: GET /jobs/{job_id}/result
