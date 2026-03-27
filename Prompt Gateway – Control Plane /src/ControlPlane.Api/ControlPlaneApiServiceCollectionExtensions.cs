@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using ControlPlane.Api.Auth;
+using ControlPlane.Api.Controllers;
 using ControlPlane.Api.Health;
 using ControlPlane.Aws;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -22,6 +23,7 @@ public static class ControlPlaneApiServiceCollectionExtensions
         services.AddSingleton(hostOptions.ResultQueueWorker);
 
         services.AddControllers()
+            .AddApplicationPart(typeof(JobsController).Assembly)
             .AddJsonOptions(options =>
             {
                 options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());

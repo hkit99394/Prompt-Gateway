@@ -7,6 +7,7 @@
 - The API host keeps only the HTTP edge plus small control-plane coordination work such as post-accept continuation.
 - The next migration phases are expected to move the HTTP control plane to Lambda/API Gateway.
 - The HTTP bootstrap is now shared through API-level composition extensions so a future Lambda host can reuse the same contract wiring while overriding host-specific options.
+- A parallel `ControlPlane.Api.Lambda` host now exists for the HTTP edge on `net8.0`, backed by API Gateway when `enable_lambda_http_api` is enabled in Terraform.
 
 ## Required configuration
 
@@ -15,6 +16,7 @@
 - Configure at least one API key using one of:
   - `ApiSecurity__ApiKeys__0`, `ApiSecurity__ApiKeys__1`, ...
   - `ApiSecurity__ApiKey` (single key fallback)
+  - `ApiSecurity__ApiKeyValueFrom` (Lambda-only secret/parameter reference; the host resolves this into `ApiSecurity__ApiKey` during cold start)
 - Configure DynamoDB storage:
   - `AwsStorage__TableName`
   - `AwsStorage__JobListIndexName` (defaults to `gsi1`, expected key schema: `gsi1pk` + `gsi1sk`)
@@ -26,6 +28,9 @@
   - `HostedWorkers__EnablePostAcceptResumeWorker` (defaults to `true`)
   - `HostedWorkers__EnableOutboxWorker` (defaults to `true`)
   - `HostedWorkers__EnableResultQueueWorker` (defaults to `true`)
+- Lambda HTTP host defaults:
+  - `ControlPlane.Api.Lambda` forces Swagger off.
+  - `ControlPlane.Api.Lambda` forces all hosted workers off, so accepted jobs will usually return `requiresResume=true`.
 - Do not store production keys in `appsettings.json`.
 - Keep keys in an environment variable source or external secret manager.
 
@@ -44,6 +49,7 @@
 - `POST /jobs` returns once the job is durably accepted.
   - Follow-up routing and dispatch continue asynchronously when the post-accept worker is enabled.
   - If the response includes `requiresResume=true`, call `POST /jobs/{jobId}/resume` to continue processing manually.
+  - This manual-resume path is expected for the Lambda HTTP host until post-accept continuation is moved to a fully serverless mechanism.
 - `POST /jobs` for `taskType=chat_completion` requires at least one prompt reference field:
   - `inputRef` (legacy-compatible, mapped to worker prompt key)
   - `promptKey`

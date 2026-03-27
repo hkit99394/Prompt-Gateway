@@ -11,6 +11,7 @@
 #
 # Optional env vars:
 #   - ENV: dev (default), staging, or prod
+#   - HTTP_EDGE_MODE: lambda (default) or ecs
 #   - BASE_URL: override (e.g. https://api.example.com); otherwise derived from ALB
 #   - API_KEY: override; otherwise fetched from SSM (dev) or Secrets Manager (staging/prod)
 #   - HEALTH_CHECK_BASE_URL: same as BASE_URL; used when set to avoid --insecure for custom domains
@@ -28,6 +29,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV="${ENV:-dev}"
 REGION="${AWS_REGION:-us-east-1}"
+HTTP_EDGE_MODE="${HTTP_EDGE_MODE:-lambda}"
 USE_INSECURE=""
 [ "${1:-}" = "--insecure" ] && USE_INSECURE="--insecure"
 INPUT_REF="${SMOKE_INPUT_REF:-prompts/smoke-test.txt}"
@@ -43,20 +45,40 @@ if [ -z "${BASE_URL:-}" ]; then
   BASE_URL="${HEALTH_CHECK_BASE_URL:-}"
 fi
 if [ -z "$BASE_URL" ]; then
-  ALB_DNS=$(aws elbv2 describe-load-balancers \
-    --names "prompt-gateway-${ENV}" \
-    --region "$REGION" \
-    --query 'LoadBalancers[0].DNSName' \
-    --output text 2>/dev/null || true)
-  if [ -z "$ALB_DNS" ] || [ "$ALB_DNS" = "None" ]; then
-    echo "Error: Could not resolve ALB DNS for prompt-gateway-${ENV}. Set BASE_URL or HEALTH_CHECK_BASE_URL."
-    exit 1
-  fi
-  if [ "$(echo "$ENV" | tr '[:upper:]' '[:lower:]')" = "dev" ]; then
-    BASE_URL="http://$ALB_DNS"
+  if [ "$HTTP_EDGE_MODE" = "lambda" ]; then
+    API_ID=$(aws apigatewayv2 get-apis \
+      --region "$REGION" \
+      --query "Items[?Name=='prompt-gateway-${ENV}-control-plane-http'].ApiId | [0]" \
+      --output text 2>/dev/null || true)
+    if [ -z "$API_ID" ] || [ "$API_ID" = "None" ]; then
+      echo "Error: Could not resolve API Gateway HTTP API for prompt-gateway-${ENV}-control-plane-http. Set BASE_URL or disable HTTP_EDGE_MODE=lambda."
+      exit 1
+    fi
+    BASE_URL=$(aws apigatewayv2 get-api \
+      --api-id "$API_ID" \
+      --region "$REGION" \
+      --query 'ApiEndpoint' \
+      --output text 2>/dev/null || true)
+    if [ -z "$BASE_URL" ] || [ "$BASE_URL" = "None" ]; then
+      echo "Error: Could not resolve API Gateway endpoint for $API_ID."
+      exit 1
+    fi
   else
-    BASE_URL="https://$ALB_DNS"
-    [ -z "${HEALTH_CHECK_BASE_URL:-}" ] && USE_INSECURE="--insecure"
+    ALB_DNS=$(aws elbv2 describe-load-balancers \
+      --names "prompt-gateway-${ENV}" \
+      --region "$REGION" \
+      --query 'LoadBalancers[0].DNSName' \
+      --output text 2>/dev/null || true)
+    if [ -z "$ALB_DNS" ] || [ "$ALB_DNS" = "None" ]; then
+      echo "Error: Could not resolve ALB DNS for prompt-gateway-${ENV}. Set BASE_URL or HEALTH_CHECK_BASE_URL."
+      exit 1
+    fi
+    if [ "$(echo "$ENV" | tr '[:upper:]' '[:lower:]')" = "dev" ]; then
+      BASE_URL="http://$ALB_DNS"
+    else
+      BASE_URL="https://$ALB_DNS"
+      [ -z "${HEALTH_CHECK_BASE_URL:-}" ] && USE_INSECURE="--insecure"
+    fi
   fi
 fi
 BASE_URL="${BASE_URL%/}"

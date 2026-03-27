@@ -12,10 +12,10 @@ COPY ["ControlPlane.Aws/ControlPlane.Aws.csproj", "ControlPlane.Aws/"]
 RUN dotnet restore "ControlPlane.Api/ControlPlane.Api.csproj"
 
 COPY . .
-RUN dotnet build "ControlPlane.Api/ControlPlane.Api.csproj" -c Release -o /app/build
+RUN dotnet build "ControlPlane.Api/ControlPlane.Api.csproj" -c Release -f net10.0 -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "ControlPlane.Api/ControlPlane.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "ControlPlane.Api/ControlPlane.Api.csproj" -c Release -f net10.0 -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app

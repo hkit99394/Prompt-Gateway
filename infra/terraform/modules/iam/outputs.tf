@@ -35,3 +35,8 @@ output "outbox_lambda_role_arn" {
   description = "Outbox dispatch Lambda role ARN"
   value       = aws_iam_role.outbox_lambda.arn
 }
+
+output "control_plane_http_lambda_role_arn" {
+  description = "Control plane HTTP Lambda role ARN"
+  value       = aws_iam_role.control_plane_http_lambda.arn
+}

@@ -296,6 +296,14 @@ Work:
 - Revisit operational endpoints (`/health`, `/ready`, Swagger) for a Lambda-hosted edge.
 - Add rollout-specific smoke tests and verification steps for the Lambda HTTP path.
 
+Implemented in the repo:
+
+- `ControlPlane.Api.Lambda` now hosts the shared HTTP API bootstrap on `net8.0`.
+- The Lambda host disables hosted background workers and Swagger, so post-accept continuation remains explicit and serverless-safe.
+- API keys are hydrated at cold start from SSM or Secrets Manager via `ApiSecurity__ApiKeyValueFrom`.
+- Terraform can provision the parallel API Gateway/Lambda edge behind `enable_lambda_http_api`.
+- `scripts/first-deploy-phase4.sh` can target that edge with `HTTP_EDGE_MODE=lambda`.
+
 Exit criteria:
 
 - The control plane API can serve live traffic through Lambda/API Gateway in a non-prod environment.

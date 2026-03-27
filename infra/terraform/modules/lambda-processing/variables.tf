@@ -11,6 +11,12 @@ variable "enable" {
   default     = false
 }
 
+variable "enable_http_api" {
+  description = "Whether to provision the Control Plane HTTP Lambda and API Gateway edge"
+  type        = bool
+  default     = false
+}
+
 variable "lambda_runtime" {
   description = "Managed Lambda runtime identifier for the .NET functions"
   type        = string
@@ -29,6 +35,11 @@ variable "result_lambda_role_arn" {
 
 variable "outbox_lambda_role_arn" {
   description = "Execution role ARN for the outbox dispatch Lambda"
+  type        = string
+}
+
+variable "control_plane_http_lambda_role_arn" {
+  description = "Execution role ARN for the Control Plane HTTP Lambda"
   type        = string
 }
 
@@ -97,6 +108,12 @@ variable "outbox_lambda_package_path" {
   default     = "artifacts/control-plane-outbox-lambda.zip"
 }
 
+variable "control_plane_http_lambda_package_path" {
+  description = "Path to the Control Plane HTTP Lambda deployment zip"
+  type        = string
+  default     = "artifacts/control-plane-api-lambda.zip"
+}
+
 variable "provider_lambda_handler" {
   description = "Handler string for the provider Lambda"
   type        = string
@@ -113,6 +130,12 @@ variable "outbox_lambda_handler" {
   description = "Handler string for the outbox Lambda"
   type        = string
   default     = "ControlPlane.OutboxLambda::ControlPlane.OutboxLambda.OutboxDispatchFunction::FunctionHandler"
+}
+
+variable "control_plane_http_lambda_handler" {
+  description = "Handler string for the Control Plane HTTP Lambda"
+  type        = string
+  default     = "ControlPlane.Api.Lambda"
 }
 
 variable "provider_lambda_timeout" {
@@ -133,6 +156,12 @@ variable "outbox_lambda_timeout" {
   default     = 60
 }
 
+variable "control_plane_http_lambda_timeout" {
+  description = "Timeout in seconds for the Control Plane HTTP Lambda"
+  type        = number
+  default     = 30
+}
+
 variable "provider_lambda_memory_size" {
   description = "Memory size in MB for the provider Lambda"
   type        = number
@@ -151,6 +180,12 @@ variable "outbox_lambda_memory_size" {
   default     = 512
 }
 
+variable "control_plane_http_lambda_memory_size" {
+  description = "Memory size in MB for the Control Plane HTTP Lambda"
+  type        = number
+  default     = 1024
+}
+
 variable "provider_lambda_reserved_concurrency" {
   description = "Reserved concurrency for the provider Lambda"
   type        = number
@@ -167,6 +202,12 @@ variable "outbox_lambda_reserved_concurrency" {
   description = "Reserved concurrency for the outbox Lambda"
   type        = number
   default     = 1
+}
+
+variable "control_plane_http_lambda_reserved_concurrency" {
+  description = "Reserved concurrency for the Control Plane HTTP Lambda"
+  type        = number
+  default     = 5
 }
 
 variable "provider_lambda_batch_size" {

@@ -14,10 +14,12 @@ Suggested ownership follows the project-local agent roster in `.agents/README.md
 |------|------|---------|
 | 0 | Normalize composition and deployment inputs | Complete: shared runtime composition roots are in place and ECS deployments use immutable image tags |
 | 1 | Fix intake semantics | Complete: `POST /jobs` now has a durable acceptance boundary with idempotent replay and resumable post-accept processing |
-| 2 | Harden provider execution | Reduce unnecessary retries and cost |
+| 2 | Harden provider execution | Complete: provider retries now distinguish transient vs terminal failures and the provider test suite covers the new policy paths |
 | 3 | Strengthen async event processing | Complete: outbox dequeue now uses indexed discovery and ECS/Lambda queue processing share the same unit-of-work contracts |
-| 4 | Improve observability and rollout confidence | Detect migration issues earlier |
-| 5 | Complete migration decisions and cleanup | Retire temporary paths safely |
+| 4 | Improve observability and rollout confidence | Complete: Lambda/queue alarms, stronger smoke-test diagnostics, and rollout gates are in place |
+| 5 | Complete migration decisions and cleanup | Partial by design: HTTP platform direction is documented, while ECS provider rollback capacity is intentionally retained |
+| 6 | Prepare the HTTP control plane for Lambda | Complete: shared HTTP bootstrap and explicit serverless host options are in place |
+| 7 | Introduce the Control Plane Lambda HTTP entry point | Complete: the net8 HTTP Lambda host, API Gateway wiring, and smoke-test edge selection are in the repo |
 
 ---
 
@@ -707,6 +709,7 @@ Health checks, post-accept continuation, and operational endpoints still assume 
 
 ### PG-701 Add Control Plane Lambda HTTP host
 
+- Status: Complete
 - Primary owner: `lambda-platform`
 - Sidecar: `control-plane-core`
 - Priority: High
@@ -727,8 +730,15 @@ Health checks, post-accept continuation, and operational endpoints still assume 
 - The control plane API can run through Lambda in a non-prod environment.
 - ECS and Lambda HTTP hosts share the same API contract and core runtime wiring.
 
+**Completion notes**
+
+- `ControlPlane.Api` now multi-targets `net8.0` and `net10.0`, so the HTTP contract and controllers can be reused by both ECS and Lambda hosts.
+- A new `ControlPlane.Api.Lambda` net8 host uses the shared `AddControlPlaneHttpApi` and `MapControlPlaneHttpApi` path while disabling hosted workers and Swagger.
+- Lambda cold starts can resolve API keys from SSM or Secrets Manager through `ApiSecurity__ApiKeyValueFrom`, matching the existing non-hardcoded secret model.
+
 ### PG-702 Add API Gateway and HTTP-edge rollout verification
 
+- Status: Complete
 - Primary owner: `lambda-platform`
 - Sidecar: `release-verification`
 - Priority: High
@@ -750,6 +760,12 @@ Health checks, post-accept continuation, and operational endpoints still assume 
 
 - Dev and staging can verify the Lambda HTTP edge with the same release gates used for the worker-side migration.
 - Auth, routing, and result-fetch behavior remain compatible with the ECS edge.
+
+**Completion notes**
+
+- Terraform now provisions an optional API Gateway HTTP API and `prompt-gateway-<env>-control-plane-http` Lambda behind `enable_lambda_http_api`.
+- `scripts/package-lambda-artifacts.sh` now publishes `artifacts/control-plane-api-lambda.zip` alongside the existing queue-processing artifacts.
+- `scripts/first-deploy-phase4.sh` can resolve the HTTP edge from API Gateway via `HTTP_EDGE_MODE=lambda`, so the same smoke-test gate can target either ALB/ECS or API Gateway/Lambda.
 
 ---
 

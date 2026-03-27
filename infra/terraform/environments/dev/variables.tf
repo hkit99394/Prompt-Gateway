@@ -36,6 +36,12 @@ variable "enable_lambda_processing" {
   default     = false
 }
 
+variable "enable_lambda_http_api" {
+  description = "Provision the Control Plane HTTP Lambda and API Gateway edge"
+  type        = bool
+  default     = false
+}
+
 variable "lambda_runtime" {
   description = "Managed Lambda runtime identifier for the .NET functions"
   type        = string
@@ -58,4 +64,10 @@ variable "outbox_lambda_package_path" {
   description = "Path to the outbox Lambda zip package"
   type        = string
   default     = "artifacts/control-plane-outbox-lambda.zip"
+}
+
+variable "control_plane_http_lambda_package_path" {
+  description = "Path to the Control Plane HTTP Lambda zip package"
+  type        = string
+  default     = "artifacts/control-plane-api-lambda.zip"
 }
