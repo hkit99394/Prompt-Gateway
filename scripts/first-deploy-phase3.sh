@@ -19,9 +19,9 @@
 #   - ENV: dev (default), staging, or prod
 #   - IMAGE_TAG: immutable tag for pushed images (default: current git SHA, or UTC timestamp fallback)
 #   - AWS_REGION: default us-east-1
-#   - PROCESSING_MODE: ecs (default) or lambda
+#   - PROCESSING_MODE: lambda (default) or ecs
 #
-# Usage: ./scripts/first-deploy-phase3.sh [--processing-mode ecs|lambda] [--build-only] [--skip-verify]
+# Usage: ./scripts/first-deploy-phase3.sh [--processing-mode lambda|ecs] [--build-only] [--skip-verify]
 
 set -euo pipefail
 
@@ -29,7 +29,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV="${ENV:-dev}"
 REGION="${AWS_REGION:-us-east-1}"
-PROCESSING_MODE="${PROCESSING_MODE:-ecs}"
+PROCESSING_MODE="${PROCESSING_MODE:-lambda}"
 BUILD_ONLY=false
 SKIP_VERIFY=false
 DEFAULT_IMAGE_TAG="$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD 2>/dev/null || date -u +%Y%m%d%H%M%S)"

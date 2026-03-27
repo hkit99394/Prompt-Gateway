@@ -244,6 +244,7 @@ Clients can hit ambiguous outcomes when `POST /jobs` partially succeeds and is r
 
 ### PG-201 Provider error classification
 
+- Status: Complete
 - Primary owner: `provider-execution`
 - Priority: High
 - Dependencies: PG-002
@@ -268,6 +269,12 @@ Provider retries are currently too coarse and likely retry permanent failures.
 - Invalid auth, invalid request shape, and unsupported inputs fail fast.
 - Transient failures continue to retry with backoff.
 - Result publication and error reporting still behave correctly.
+
+**Completion notes**
+
+- `OpenAiClient` now classifies OpenAI failures before retrying, so authentication and invalid-request failures no longer consume retry attempts.
+- Retryable transport and upstream conditions continue to use backoff, while terminal provider failures surface immediately as `OpenAiException`.
+- Provider execution tests cover the classifier and terminal-error publication path.
 
 ### PG-202 Provider execution policy controls
 
@@ -302,6 +309,7 @@ Runtime knobs for concurrency, visibility timeout, OpenAI retry limits, and Lamb
 
 ### PG-203 Provider execution test expansion
 
+- Status: Complete
 - Primary owner: `provider-execution`
 - Priority: Medium-High
 - Dependencies: PG-201
@@ -322,6 +330,12 @@ Runtime knobs for concurrency, visibility timeout, OpenAI retry limits, and Lamb
   - non-retryable upstream failures
   - publish failure after successful provider call
   - terminal provider error publication
+
+**Completion notes**
+
+- `OpenAiClientTests` now cover retryable vs non-retryable OpenAI failure classification.
+- `ProviderMessageProcessorTests` cover terminal provider error publication and publish-failure handling.
+- Existing success-path publish-failure coverage remains in place.
 
 ---
 
