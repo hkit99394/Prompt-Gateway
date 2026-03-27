@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # First-deploy Phase 3: Application deploy (T-5.3.1 – T-5.3.6)
 # Builds and pushes the application artifacts for the selected processing mode,
-# updates ECS task definitions, and verifies that the selected runtime is active
-# while the unselected runtime is disabled.
+# refreshes ECS rollback task definitions, and verifies that the selected runtime
+# is active while the unselected runtime is disabled.
 #
 # Prerequisites:
 #   - AWS credentials configured
@@ -135,19 +135,14 @@ docker build --platform linux/amd64 \
 docker push "$ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG"
 echo "  OK: $ECR_REPO_API pushed"
 
-if [ "$PROCESSING_MODE" = "ecs" ]; then
-  echo ""
-  echo "T-5.3.2: Build and push Provider Worker image"
-  docker build --platform linux/amd64 \
-    -t "$ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG" \
-    -f "./${WORKER_CONTEXT}/Provider.Worker.Host/Dockerfile" \
-    "./${WORKER_CONTEXT}"
-  docker push "$ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG"
-  echo "  OK: $ECR_REPO_WORKER pushed"
-else
-  echo ""
-  echo "T-5.3.2: Skipping Provider Worker container image because Lambda mode is selected"
-fi
+echo ""
+echo "T-5.3.2: Build and push Provider Worker image"
+docker build --platform linux/amd64 \
+  -t "$ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG" \
+  -f "./${WORKER_CONTEXT}/Provider.Worker.Host/Dockerfile" \
+  "./${WORKER_CONTEXT}"
+docker push "$ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG"
+echo "  OK: $ECR_REPO_WORKER pushed"
 
 if [ "$BUILD_ONLY" = true ]; then
   echo ""
@@ -185,23 +180,14 @@ else
   WORKER_JQ_IMAGE=".taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = \"$WORKER_IMAGE\""
 fi
 
-if [ "$DEPLOY_ECS_API_SERVICE" = "true" ]; then
-  aws ecs describe-task-definition --task-definition "$TASK_DEF_API" --region "$REGION" \
-    | jq "$API_JQ_IMAGE" > "$API_TASKDEF_FILE"
-fi
+aws ecs describe-task-definition --task-definition "$TASK_DEF_API" --region "$REGION" \
+  | jq "$API_JQ_IMAGE" > "$API_TASKDEF_FILE"
+aws ecs describe-task-definition --task-definition "$TASK_DEF_WORKER" --region "$REGION" \
+  | jq "$WORKER_JQ_IMAGE" > "$WORKER_TASKDEF_FILE"
 
-if [ "$PROCESSING_MODE" = "ecs" ]; then
-  aws ecs describe-task-definition --task-definition "$TASK_DEF_WORKER" --region "$REGION" \
-    | jq "$WORKER_JQ_IMAGE" > "$WORKER_TASKDEF_FILE"
-fi
-
-if [ "$DEPLOY_ECS_API_SERVICE" = "true" ]; then
-  aws ecs register-task-definition --cli-input-json "file://$API_TASKDEF_FILE" --region "$REGION" > /dev/null
-fi
-if [ "$PROCESSING_MODE" = "ecs" ]; then
-  aws ecs register-task-definition --cli-input-json "file://$WORKER_TASKDEF_FILE" --region "$REGION" > /dev/null
-fi
-echo "  OK: Task definitions registered"
+aws ecs register-task-definition --cli-input-json "file://$API_TASKDEF_FILE" --region "$REGION" > /dev/null
+aws ecs register-task-definition --cli-input-json "file://$WORKER_TASKDEF_FILE" --region "$REGION" > /dev/null
+echo "  OK: ECS task definitions registered for active deploy and rollback"
 
 # --- T-5.3.5 & T-5.3.6: Deploy services ---
 echo ""
@@ -215,12 +201,18 @@ if [ "$DEPLOY_ECS_API_SERVICE" = "true" ]; then
     --region "$REGION" \
     --no-cli-pager --query 'service.serviceName' --output text
 else
-  echo "  Skipping ECS control-plane-api redeploy because Lambda HTTP mode keeps the ECS API service off by default"
+  aws ecs update-service \
+    --cluster "$CLUSTER" \
+    --service "$API_SERVICE" \
+    --task-definition "$TASK_DEF_API" \
+    --region "$REGION" \
+    --no-cli-pager --query 'service.serviceName' --output text > /dev/null
+  echo "  Updated ECS control-plane-api rollback service to the latest task definition without redeploying active tasks"
 fi
 
+echo ""
+echo "T-5.3.6: Update Provider Worker service task definition"
 if [ "$PROCESSING_MODE" = "ecs" ]; then
-  echo ""
-  echo "T-5.3.6: Deploy Provider Worker service"
   aws ecs update-service \
     --cluster "$CLUSTER" \
     --service "$WORKER_SERVICE" \
@@ -228,6 +220,14 @@ if [ "$PROCESSING_MODE" = "ecs" ]; then
     --force-new-deployment \
     --region "$REGION" \
     --no-cli-pager --query 'service.serviceName' --output text
+else
+  aws ecs update-service \
+    --cluster "$CLUSTER" \
+    --service "$WORKER_SERVICE" \
+    --task-definition "$TASK_DEF_WORKER" \
+    --region "$REGION" \
+    --no-cli-pager --query 'service.serviceName' --output text > /dev/null
+  echo "  Updated ECS provider-worker rollback service to the latest task definition without enabling the service"
 fi
 
 # --- T-5.3.7: Verify selected runtime is active ---

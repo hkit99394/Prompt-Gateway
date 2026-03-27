@@ -87,9 +87,10 @@ This keeps ECS mode available as a rollback path while verifying that Lambda mod
 
 ## Current platform decision
 
-- The HTTP Control Plane API stays on ECS/ALB.
 - Lambda is the chosen runtime for provider execution, result ingestion, and scheduled outbox dispatch.
-- Removing the ECS provider-worker service from Terraform is deferred until promotion evidence exists beyond `dev`.
+- The HTTP control plane now supports both ECS/ALB and Lambda/API Gateway, with Lambda HTTP promotion in progress.
+- ECS HTTP and ECS provider-worker infrastructure remain retained as rollback paths until the relevant promotion evidence is complete.
+- Phase 3 now refreshes the ECS rollback task definitions even in Lambda mode, and mode verification fails if either rollback service still points at a placeholder `bootstrap` image.
 
 ## First-time backend setup
 

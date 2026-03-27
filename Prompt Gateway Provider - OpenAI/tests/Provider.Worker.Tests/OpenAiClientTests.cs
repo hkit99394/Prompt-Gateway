@@ -12,6 +12,8 @@ public class OpenAiClientTests
 
         Assert.That(options.OpenAiRetryMaxAttempts, Is.EqualTo(3));
         Assert.That(options.OpenAiRetryMaxBackoffSeconds, Is.EqualTo(10));
+        Assert.That(options.ProcessingOverheadBufferSeconds, Is.EqualTo(15));
+        Assert.That(options.ExecutionTimeoutSeconds, Is.EqualTo(0));
     }
 
     [Test]

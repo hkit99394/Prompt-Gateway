@@ -2,12 +2,11 @@
 
 ## Platform decision
 
-- The HTTP control plane is still on ECS/ALB today.
-- Lambda is the target runtime for queue-driven dispatch, provider execution, and result ingestion.
-- The API host keeps only the HTTP edge plus small control-plane coordination work such as post-accept continuation.
-- The next migration phases are expected to move the HTTP control plane to Lambda/API Gateway.
-- The HTTP bootstrap is now shared through API-level composition extensions so a future Lambda host can reuse the same contract wiring while overriding host-specific options.
-- A parallel `ControlPlane.Api.Lambda` host now exists for the HTTP edge on `net8.0`, backed by API Gateway when `enable_lambda_http_api` is enabled in Terraform.
+- Queue-driven dispatch, provider execution, and result ingestion are designed to run in Lambda mode.
+- The HTTP control plane now has both ECS and Lambda hosts in the repo.
+- Lambda/API Gateway promotion for the HTTP edge is in progress, with `ControlPlane.Api.Lambda` available behind `enable_lambda_http_api`.
+- The ECS API host remains the rollback edge until HTTP cutover evidence is complete; it is not the only intended long-term path anymore.
+- The shared HTTP bootstrap keeps the request contract aligned across both hosts while allowing host-specific options such as hosted workers and Swagger exposure.
 
 ## Required configuration
 

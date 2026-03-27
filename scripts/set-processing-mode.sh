@@ -183,10 +183,13 @@ verify_mode() {
   local api_task_definition
   local api_desired_count
   local api_running_count
+  local api_image
   local api_outbox_enabled
   local api_result_enabled
+  local worker_task_definition
   local worker_desired_count
   local worker_running_count
+  local worker_image
 
   echo "Verifying $MODE processing mode..."
 
@@ -213,6 +216,11 @@ verify_mode() {
     --region "$REGION" \
     --query 'services[0].runningCount' \
     --output text)
+  api_image=$(aws ecs describe-task-definition \
+    --task-definition "$api_task_definition" \
+    --region "$REGION" \
+    --query 'taskDefinition.containerDefinitions[0].image' \
+    --output text)
 
   api_outbox_enabled=$(aws ecs describe-task-definition \
     --task-definition "$api_task_definition" \
@@ -223,6 +231,12 @@ verify_mode() {
     --task-definition "$api_task_definition" \
     --region "$REGION" \
     --query 'taskDefinition.containerDefinitions[0].environment[?name==`HostedWorkers__EnableResultQueueWorker`].value | [0]' \
+    --output text)
+  worker_task_definition=$(aws ecs describe-services \
+    --cluster "$CLUSTER_NAME" \
+    --services "$WORKER_SERVICE_NAME" \
+    --region "$REGION" \
+    --query 'services[0].taskDefinition' \
     --output text)
   worker_desired_count=$(aws ecs describe-services \
     --cluster "$CLUSTER_NAME" \
@@ -236,6 +250,21 @@ verify_mode() {
     --region "$REGION" \
     --query 'services[0].runningCount' \
     --output text)
+  worker_image=$(aws ecs describe-task-definition \
+    --task-definition "$worker_task_definition" \
+    --region "$REGION" \
+    --query 'taskDefinition.containerDefinitions[0].image' \
+    --output text)
+
+  if [ -z "$api_image" ] || [ "$api_image" = "None" ] || [[ "$api_image" == *":bootstrap" ]]; then
+    echo "FAIL: ECS control-plane-api rollback task definition is not deployable (image=$api_image)"
+    exit 1
+  fi
+
+  if [ -z "$worker_image" ] || [ "$worker_image" = "None" ] || [[ "$worker_image" == *":bootstrap" ]]; then
+    echo "FAIL: ECS provider-worker rollback task definition is not deployable (image=$worker_image)"
+    exit 1
+  fi
 
   if [ "$MODE" = "lambda" ]; then
     if [ "$api_outbox_enabled" != "false" ]; then

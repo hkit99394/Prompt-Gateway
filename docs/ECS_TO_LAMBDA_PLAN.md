@@ -25,8 +25,8 @@ The cleanest path is:
 ## Current decision
 
 - Queue-driven processing is moving to Lambda and is the intended steady-state execution path.
-- The HTTP control plane is still on ECS/ALB today, but it is no longer treated as the long-term final state.
-- The ECS provider-worker service remains in the repo as rollback infrastructure until Lambda mode is proven through a full promotion cycle, not because it is still the target architecture.
+- The HTTP control plane now has both ECS and Lambda hosts in the repo, with Lambda/API Gateway promotion in progress rather than deferred to a future design-only phase.
+- ECS provider-worker and ECS HTTP infrastructure remain in the repo as rollback paths until Lambda promotion evidence is complete, not because they are still the intended steady-state architecture.
 
 ## What the repo shows today
 
@@ -366,7 +366,7 @@ Rollback expectations:
   - at least one full staging-to-prod promotion cycle in Lambda mode succeeds
   - rollback steps are exercised or otherwise evidenced
   - promotion evidence is recorded alongside deployment notes
-- The HTTP control plane is still running on ECS today, but future phases now target Lambda/API Gateway for the HTTP edge as well.
+- The HTTP control plane is no longer described by the repo as ECS-only: Lambda/API Gateway rollout is underway, while ECS remains the documented rollback edge.
 
 ## Main risks
 

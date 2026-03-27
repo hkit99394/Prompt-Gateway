@@ -53,6 +53,11 @@ variable "dispatch_queue_url" {
   type        = string
 }
 
+variable "dispatch_queue_visibility_timeout_seconds" {
+  description = "Dispatch queue visibility timeout in seconds"
+  type        = number
+}
+
 variable "result_queue_arn" {
   description = "Result queue ARN"
   type        = string
@@ -141,7 +146,7 @@ variable "control_plane_http_lambda_handler" {
 variable "provider_lambda_timeout" {
   description = "Timeout in seconds for the provider Lambda"
   type        = number
-  default     = 120
+  default     = 300
 }
 
 variable "result_lambda_timeout" {
@@ -213,7 +218,31 @@ variable "control_plane_http_lambda_reserved_concurrency" {
 variable "provider_lambda_batch_size" {
   description = "SQS batch size for the provider Lambda"
   type        = number
-  default     = 5
+  default     = 1
+}
+
+variable "provider_worker_openai_timeout_seconds" {
+  description = "OpenAI request timeout in seconds used by the provider runtime"
+  type        = number
+  default     = 90
+}
+
+variable "provider_worker_openai_retry_max_attempts" {
+  description = "Maximum number of OpenAI attempts per provider message"
+  type        = number
+  default     = 3
+}
+
+variable "provider_worker_openai_retry_max_backoff_seconds" {
+  description = "Maximum backoff cap in seconds between OpenAI retry attempts"
+  type        = number
+  default     = 10
+}
+
+variable "provider_worker_processing_overhead_buffer_seconds" {
+  description = "Additional safety buffer in seconds for prompt loading, payload storage, and result publication"
+  type        = number
+  default     = 15
 }
 
 variable "result_lambda_batch_size" {

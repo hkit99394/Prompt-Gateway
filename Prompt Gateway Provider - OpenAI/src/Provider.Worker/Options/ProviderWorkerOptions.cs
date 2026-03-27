@@ -33,7 +33,13 @@ public class ProviderWorkerOptions
     public int DedupeMemoryTtlMinutes { get; set; } = 60;
 
     public string DedupeTableName { get; set; } = string.Empty;
+
+    public int ExecutionTimeoutSeconds { get; set; } = 0;
+
+    public int ProcessingOverheadBufferSeconds { get; set; } = 15;
+
     public int OpenAiRetryMaxAttempts { get; set; } = 3;
+
     public int OpenAiRetryMaxBackoffSeconds { get; set; } = 10;
 
     public OpenAiOptions OpenAi { get; set; } = new();
@@ -61,6 +67,12 @@ public class ProviderWorkerOptions
         if (VisibilityTimeoutSeconds < 0)
         {
             error = "VisibilityTimeoutSeconds cannot be negative.";
+            return false;
+        }
+
+        if (ExecutionTimeoutSeconds < 0)
+        {
+            error = "ExecutionTimeoutSeconds cannot be negative.";
             return false;
         }
 
@@ -118,8 +130,56 @@ public class ProviderWorkerOptions
             return false;
         }
 
+        if (ProcessingOverheadBufferSeconds < 0)
+        {
+            error = "ProcessingOverheadBufferSeconds cannot be negative.";
+            return false;
+        }
+
+        if (ExecutionTimeoutSeconds > 0)
+        {
+            var requiredExecutionWindow = GetWorstCaseInvocationProcessingWindowSeconds();
+            if (ExecutionTimeoutSeconds < requiredExecutionWindow)
+            {
+                error =
+                    $"ExecutionTimeoutSeconds ({ExecutionTimeoutSeconds}) must be at least the worst-case invocation window ({requiredExecutionWindow}) for MaxMessages={MaxMessages}, OpenAi.TimeoutSeconds={OpenAi.TimeoutSeconds}, OpenAiRetryMaxAttempts={OpenAiRetryMaxAttempts}, and OpenAiRetryMaxBackoffSeconds={OpenAiRetryMaxBackoffSeconds}.";
+                return false;
+            }
+
+            if (VisibilityTimeoutSeconds < requiredExecutionWindow)
+            {
+                error =
+                    $"VisibilityTimeoutSeconds ({VisibilityTimeoutSeconds}) must be at least the worst-case invocation window ({requiredExecutionWindow}) when ExecutionTimeoutSeconds is configured.";
+                return false;
+            }
+        }
+
         error = string.Empty;
         return true;
+    }
+
+    public int GetWorstCaseSingleMessageProcessingWindowSeconds()
+    {
+        return checked((OpenAiRetryMaxAttempts * OpenAi.TimeoutSeconds)
+            + GetWorstCaseRetryDelaySeconds()
+            + ProcessingOverheadBufferSeconds);
+    }
+
+    public int GetWorstCaseInvocationProcessingWindowSeconds()
+    {
+        return checked(GetWorstCaseSingleMessageProcessingWindowSeconds() * MaxMessages);
+    }
+
+    public int GetWorstCaseRetryDelaySeconds()
+    {
+        var totalDelaySeconds = 0;
+        for (var attempt = 1; attempt < OpenAiRetryMaxAttempts; attempt++)
+        {
+            var exponentialDelay = (int)Math.Ceiling(Math.Pow(2, attempt) * 1.15d);
+            totalDelaySeconds += Math.Min(OpenAiRetryMaxBackoffSeconds, exponentialDelay);
+        }
+
+        return totalDelaySeconds;
     }
 }
 

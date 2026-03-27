@@ -10,6 +10,16 @@ locals {
   api_keys_secret_arn   = "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:prompt-gateway/${var.environment}/api-keys"
   openai_key_value_from = lower(var.environment) == "dev" ? "arn:aws:ssm:${local.region}:${local.account_id}:parameter/prompt-gateway/${var.environment}/openai-api-key" : local.openai_key_secret_arn
   api_keys_value_from   = lower(var.environment) == "dev" ? "arn:aws:ssm:${local.region}:${local.account_id}:parameter/prompt-gateway/${var.environment}/api-keys" : local.api_keys_secret_arn
+  provider_retry_delay_seconds = sum([
+    for attempt in range(1, var.provider_worker_openai_retry_max_attempts) :
+    min(var.provider_worker_openai_retry_max_backoff_seconds, ceil(pow(2, attempt) * 1.15))
+  ])
+  provider_single_message_window_seconds = (
+    (var.provider_worker_openai_timeout_seconds * var.provider_worker_openai_retry_max_attempts)
+    + local.provider_retry_delay_seconds
+    + var.provider_worker_processing_overhead_buffer_seconds
+  )
+  provider_invocation_window_seconds = local.provider_single_message_window_seconds * var.provider_lambda_batch_size
 }
 
 resource "aws_cloudwatch_log_group" "provider" {
@@ -77,14 +87,33 @@ resource "aws_lambda_function" "provider" {
   environment {
     variables = merge(
       {
-        ProviderWorker__InputQueueUrl           = var.dispatch_queue_url
-        ProviderWorker__OutputQueueUrl          = var.result_queue_url
-        ProviderWorker__DedupeTableName         = var.worker_dedupe_table_name
-        ProviderWorker__OpenAi__ApiKeyValueFrom = local.openai_key_value_from
+        ProviderWorker__InputQueueUrl                   = var.dispatch_queue_url
+        ProviderWorker__OutputQueueUrl                  = var.result_queue_url
+        ProviderWorker__DedupeTableName                 = var.worker_dedupe_table_name
+        ProviderWorker__MaxMessages                     = tostring(var.provider_lambda_batch_size)
+        ProviderWorker__VisibilityTimeoutSeconds        = tostring(var.dispatch_queue_visibility_timeout_seconds)
+        ProviderWorker__ExecutionTimeoutSeconds         = tostring(var.provider_lambda_timeout)
+        ProviderWorker__OpenAi__TimeoutSeconds          = tostring(var.provider_worker_openai_timeout_seconds)
+        ProviderWorker__OpenAiRetryMaxAttempts          = tostring(var.provider_worker_openai_retry_max_attempts)
+        ProviderWorker__OpenAiRetryMaxBackoffSeconds    = tostring(var.provider_worker_openai_retry_max_backoff_seconds)
+        ProviderWorker__ProcessingOverheadBufferSeconds = tostring(var.provider_worker_processing_overhead_buffer_seconds)
+        ProviderWorker__OpenAi__ApiKeyValueFrom         = local.openai_key_value_from
       },
       var.prompts_bucket_name != "" ? { ProviderWorker__PromptBucket = var.prompts_bucket_name } : {},
       var.results_bucket_name != "" ? { ProviderWorker__ResultBucket = var.results_bucket_name } : {}
     )
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.provider_lambda_timeout >= local.provider_invocation_window_seconds
+      error_message = "provider_lambda_timeout is too low for the configured provider batch size and OpenAI retry budget. Increase provider_lambda_timeout or reduce provider_lambda_batch_size / provider retry settings."
+    }
+
+    precondition {
+      condition     = var.dispatch_queue_visibility_timeout_seconds >= local.provider_invocation_window_seconds
+      error_message = "Dispatch queue visibility timeout is too low for the configured provider Lambda invocation window. Increase the SQS visibility timeout or reduce provider batch/retry settings."
+    }
   }
 
   depends_on = [aws_cloudwatch_log_group.provider]

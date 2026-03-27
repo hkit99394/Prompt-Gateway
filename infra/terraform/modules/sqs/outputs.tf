@@ -40,3 +40,8 @@ output "result_queue_name" {
   description = "Result queue name"
   value       = aws_sqs_queue.result.name
 }
+
+output "visibility_timeout_seconds" {
+  description = "Configured SQS visibility timeout in seconds"
+  value       = var.visibility_timeout_seconds
+}
