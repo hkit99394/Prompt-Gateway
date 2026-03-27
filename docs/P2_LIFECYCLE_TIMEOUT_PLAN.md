@@ -1,5 +1,16 @@
 # Prompt Gateway - P2 Lifecycle and Timeout Plan
 
+> **Document status: Historical change record**
+>
+> This file records lifecycle and timeout hardening work. Keep it as implementation history and design context, but prefer the current runbooks and code-adjacent READMEs for present behavior.
+>
+> Use these docs first for the current implemented system:
+>
+> - `docs/README.md`
+> - `Prompt Gateway – Control Plane /src/ControlPlane.Api/README.md`
+> - `Prompt Gateway Provider - OpenAI/README.md`
+> - `docs/IMPLEMENTATION_BACKLOG.md`
+
 This plan addresses two P2 issues:
 - `Started` lifecycle state exists but is not emitted in the current orchestration flow.
 - `OpenAi.TimeoutSeconds` is validated but not enforced during provider calls.
@@ -109,4 +120,3 @@ Phase C:
 - [ ] Dev validation complete
 - [ ] Staging validation complete
 - [ ] Production rollout complete
-

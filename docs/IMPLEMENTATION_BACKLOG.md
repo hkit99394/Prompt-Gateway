@@ -1,0 +1,583 @@
+# Prompt Gateway – Implementation Backlog
+
+This document turns the architecture review into a phase-by-phase implementation backlog with ticket IDs, suggested owners, dependencies, and acceptance criteria.
+
+Suggested ownership follows the project-local agent roster in `.agents/README.md`:
+
+- Use one primary owner per hotspot file.
+- Add `release-verification` when a change affects rollout safety or runtime behavior.
+- During the ECS-to-Lambda migration, prefer the Lambda-focused roster.
+
+## Status Summary
+
+| Phase | Goal | Outcome |
+|------|------|---------|
+| 0 | Normalize composition and deployment inputs | Reduce drift between ECS and Lambda hosts |
+| 1 | Fix intake semantics | Make job submission safe and retryable |
+| 2 | Harden provider execution | Reduce unnecessary retries and cost |
+| 3 | Strengthen async event processing | Improve outbox scalability and behavioral consistency |
+| 4 | Improve observability and rollout confidence | Detect migration issues earlier |
+| 5 | Complete migration decisions and cleanup | Retire temporary paths safely |
+
+---
+
+## Phase 0 – Foundation
+
+### PG-001 Shared control-plane composition root
+
+- Primary owner: `runtime-extraction`
+- Sidecar: `release-verification`
+- Priority: High
+- Dependencies: None
+
+**Problem**
+
+Control Plane API and result-processing Lambda bootstrap the same routing, retry, AWS, and orchestration services separately. This increases the chance of configuration drift.
+
+**Scope**
+
+- Extract shared Control Plane registration methods.
+- Keep host-specific concerns thin.
+- Preserve existing behavior.
+
+**Target files**
+
+- `Prompt Gateway – Control Plane /src/ControlPlane.Api/Program.cs`
+- `Prompt Gateway – Control Plane /src/ControlPlane.ResultLambda/Function.cs`
+- `Prompt Gateway – Control Plane /src/ControlPlane.OutboxLambda/Function.cs`
+- new shared registration/extensions file(s) under `Prompt Gateway – Control Plane /src/`
+
+**Acceptance criteria**
+
+- API and Lambda entrypoints use the same shared registration path for:
+  - routing options
+  - retry options
+  - AWS store/queue options
+  - orchestrator/result-processing services
+- Host files become thin shells.
+- All existing Control Plane tests still pass.
+
+### PG-002 Shared provider composition root
+
+- Primary owner: `runtime-extraction`
+- Priority: High
+- Dependencies: None
+
+**Problem**
+
+The ECS host and Lambda host for provider execution share most of the same service registration, but still bootstrap separately.
+
+**Scope**
+
+- Extract shared provider worker registrations.
+- Keep Lambda-specific secret-loading separate and explicit.
+
+**Target files**
+
+- `Prompt Gateway Provider - OpenAI/src/Provider.Worker.Host/Program.cs`
+- `Prompt Gateway Provider - OpenAI/src/Provider.Worker.Lambda/Function.cs`
+- new shared registration/extensions file(s) under `Prompt Gateway Provider - OpenAI/src/`
+
+**Acceptance criteria**
+
+- ECS host and Lambda host use the same service registration method.
+- Lambda-specific secret hydration remains isolated to Lambda bootstrap.
+- All existing provider tests still pass.
+
+### PG-003 Immutable deployment artifacts
+
+- Primary owner: `lambda-platform`
+- Sidecar: `release-verification`
+- Priority: High
+- Dependencies: None
+
+**Problem**
+
+ECS services currently point at mutable `:latest` images, which weakens reproducibility and rollback clarity.
+
+**Scope**
+
+- Replace mutable ECS image references with immutable tags or digests.
+- Align deployment docs with immutable artifact promotion.
+
+**Target files**
+
+- `infra/terraform/modules/ecs-service/main.tf`
+- `docs/DEPLOYMENT_PLAN.md`
+- deployment scripts as needed
+
+**Acceptance criteria**
+
+- ECS task definitions no longer depend on mutable `:latest`.
+- Rollback can be performed by selecting a known prior artifact.
+- Deployment documentation matches the new artifact strategy.
+
+---
+
+## Phase 1 – Intake Semantics
+
+### PG-101 Intake idempotency contract
+
+- Primary owner: `control-plane-core`
+- Priority: High
+- Dependencies: PG-001
+
+**Problem**
+
+Clients can hit ambiguous outcomes when `POST /jobs` partially succeeds and is retried.
+
+**Scope**
+
+- Add an idempotent submission contract.
+- Support stable caller-provided identity for retries.
+- Define behavior for duplicate submissions.
+
+**Target files**
+
+- `Prompt Gateway – Control Plane /src/ControlPlane.Api/Controllers/JobsController.cs`
+- `Prompt Gateway – Control Plane /src/ControlPlane.Core/JobOrchestrator.cs`
+- Control Plane model/store abstractions as needed
+
+**Acceptance criteria**
+
+- Repeating the same intake request with the same idempotency input does not create duplicate jobs.
+- The API returns the original durable handle for equivalent retries.
+- Error responses clearly distinguish malformed input from duplicate/idempotent replay.
+
+### PG-102 Durable acceptance boundary for `POST /jobs`
+
+- Primary owner: `control-plane-core`
+- Sidecar: `release-verification`
+- Priority: High
+- Dependencies: PG-001
+
+**Problem**
+
+`POST /jobs` currently accepts, routes, and dispatches inline. If accept succeeds and a later step fails, the client sees an error even though a job exists.
+
+**Scope**
+
+- Make durable acceptance the explicit success boundary.
+- Move routing/dispatch to an asynchronous or resumable path after acceptance.
+- Keep job lifecycle visibility intact.
+
+**Target files**
+
+- `Prompt Gateway – Control Plane /src/ControlPlane.Api/Controllers/JobsController.cs`
+- `Prompt Gateway – Control Plane /src/ControlPlane.Core/JobOrchestrator.cs`
+- supporting processors or resume paths as needed
+
+**Acceptance criteria**
+
+- Successful API responses mean the job was durably accepted.
+- Failures after acceptance do not require the client to guess whether the job exists.
+- Retry and resume behavior is documented and tested.
+
+### PG-103 Intake and partial-failure test coverage
+
+- Primary owner: `control-plane-core`
+- Priority: High
+- Dependencies: PG-101, PG-102
+
+**Scope**
+
+- Add tests for duplicate intake and partial failure behavior.
+
+**Target files**
+
+- `Prompt Gateway – Control Plane /tests/ControlPlane.Core.Tests/JobOrchestratorTests.cs`
+- `Prompt Gateway – Control Plane /tests/ControlPlane.Core.Tests/ApiSecurityTests.cs`
+- other Control Plane tests as needed
+
+**Acceptance criteria**
+
+- Tests cover:
+  - duplicate intake with the same idempotency identity
+  - accept succeeds but route fails
+  - accept succeeds but dispatch fails
+  - safe retry behavior after ambiguous client-side failure
+
+---
+
+## Phase 2 – Provider Execution Hardening
+
+### PG-201 Provider error classification
+
+- Primary owner: `provider-execution`
+- Priority: High
+- Dependencies: PG-002
+
+**Problem**
+
+Provider retries are currently too coarse and likely retry permanent failures.
+
+**Scope**
+
+- Classify transient vs terminal provider failures.
+- Retry only transient conditions such as timeouts, throttling, and recoverable upstream failures.
+
+**Target files**
+
+- `Prompt Gateway Provider - OpenAI/src/Provider.Worker/Services/OpenAiClient.cs`
+- `Prompt Gateway Provider - OpenAI/src/Provider.Worker/Services/ProviderMessageProcessor.cs`
+- provider models/errors as needed
+
+**Acceptance criteria**
+
+- Invalid auth, invalid request shape, and unsupported inputs fail fast.
+- Transient failures continue to retry with backoff.
+- Result publication and error reporting still behave correctly.
+
+### PG-202 Provider execution policy controls
+
+- Primary owner: `provider-execution`
+- Sidecar: `release-verification`
+- Priority: Medium-High
+- Dependencies: PG-201
+
+**Problem**
+
+Runtime knobs for concurrency, visibility timeout, OpenAI retry limits, and Lambda reserved concurrency need to work together predictably.
+
+**Scope**
+
+- Validate operational settings more explicitly.
+- Document how ECS/Lambda concurrency and queue visibility should be tuned together.
+
+**Target files**
+
+- `Prompt Gateway Provider - OpenAI/src/Provider.Worker/Options/ProviderWorkerOptions.cs`
+- `infra/terraform/modules/lambda-processing/main.tf`
+- provider runtime docs as needed
+
+**Acceptance criteria**
+
+- Validation catches obviously unsafe or contradictory settings.
+- Runtime docs define tuning rules for:
+  - queue visibility timeout
+  - worker concurrency
+  - Lambda reserved concurrency
+  - provider retry duration
+
+### PG-203 Provider execution test expansion
+
+- Primary owner: `provider-execution`
+- Priority: Medium-High
+- Dependencies: PG-201
+
+**Scope**
+
+- Add tests for retryable vs non-retryable provider errors.
+
+**Target files**
+
+- `Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/OpenAiClientTests.cs`
+- `Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/ProviderMessageProcessorTests.cs`
+
+**Acceptance criteria**
+
+- Tests cover:
+  - retryable upstream failures
+  - non-retryable upstream failures
+  - publish failure after successful provider call
+  - terminal provider error publication
+
+---
+
+## Phase 3 – Async Event Processing
+
+### PG-301 Outbox dequeue redesign for scale
+
+- Primary owner: `async-event-processing`
+- Priority: High
+- Dependencies: PG-001
+
+**Problem**
+
+The current outbox dequeue path depends on filtered queries over a shared partition, which is correct but may become inefficient under sustained load.
+
+**Scope**
+
+- Redesign how dispatchable outbox work is discovered.
+- Preserve at-least-once dispatch and lease safety.
+
+**Target files**
+
+- `Prompt Gateway – Control Plane /src/ControlPlane.Aws/DynamoDbOutboxStore.cs`
+- `Prompt Gateway – Control Plane /src/ControlPlane.Core/DispatchOutboxProcessor.cs`
+- `Prompt Gateway – Control Plane /src/ControlPlane.Core/OutboxDispatchBatchProcessor.cs`
+- DynamoDB infrastructure or schema docs as needed
+
+**Acceptance criteria**
+
+- Dequeue cost stays bounded under backlog.
+- Work claiming remains safe under concurrency.
+- Existing delivery guarantees are preserved.
+
+### PG-302 ECS and Lambda queue-processing parity
+
+- Primary owner: `async-event-processing`
+- Priority: Medium-High
+- Dependencies: PG-001, PG-002
+
+**Problem**
+
+Queue work is already mostly shared, but ECS loops and Lambda handlers still create room for small behavioral drift.
+
+**Scope**
+
+- Align ack/retry semantics between ECS and Lambda paths.
+- Make the unit-of-work contract explicit and reusable.
+
+**Target files**
+
+- `Prompt Gateway – Control Plane /src/ControlPlane.Api/OutboxWorker.cs`
+- `Prompt Gateway – Control Plane /src/ControlPlane.Api/ResultQueueWorker.cs`
+- `Prompt Gateway – Control Plane /src/ControlPlane.OutboxLambda/Function.cs`
+- `Prompt Gateway – Control Plane /src/ControlPlane.ResultLambda/Function.cs`
+- `Prompt Gateway Provider - OpenAI/src/Provider.Worker/Worker.cs`
+- `Prompt Gateway Provider - OpenAI/src/Provider.Worker.Lambda/Function.cs`
+
+**Acceptance criteria**
+
+- ECS and Lambda use the same message-processing contract for success vs retry.
+- Runtime-specific code only handles polling, batching, and trigger integration.
+- No behavioral drift in duplicate or retry handling.
+
+### PG-303 Async processing tests for backlog and lease behavior
+
+- Primary owner: `async-event-processing`
+- Priority: Medium
+- Dependencies: PG-301, PG-302
+
+**Scope**
+
+- Add tests for outbox lease recovery and batch processing semantics.
+
+**Target files**
+
+- `Prompt Gateway – Control Plane /tests/ControlPlane.Core.Tests/OutboxDispatchFunctionTests.cs`
+- `Prompt Gateway – Control Plane /tests/ControlPlane.Core.Tests/ResultQueueFunctionTests.cs`
+- `Prompt Gateway Provider - OpenAI/tests/Provider.Worker.Tests/ProviderDispatchFunctionTests.cs`
+
+**Acceptance criteria**
+
+- Tests cover:
+  - lease expiry recovery
+  - partial batch failure behavior
+  - duplicate in-progress handling
+  - batch limit behavior
+
+---
+
+## Phase 4 – Observability And Rollout Confidence
+
+### PG-401 Lambda and queue health alarms
+
+- Primary owner: `lambda-platform`
+- Sidecar: `observability`
+- Priority: High
+- Dependencies: PG-003
+
+**Problem**
+
+Monitoring currently favors ECS and generic DLQ visibility more than Lambda runtime health and primary queue pressure.
+
+**Scope**
+
+- Add Lambda-focused alarms and queue backlog alarms.
+
+**Target files**
+
+- `infra/terraform/modules/monitoring/main.tf`
+- `infra/terraform/modules/lambda-processing/main.tf`
+
+**Acceptance criteria**
+
+- Monitoring covers:
+  - Lambda errors
+  - Lambda throttles
+  - high duration / timeout pressure
+  - primary queue age or visible backlog
+  - reserved concurrency pressure where relevant
+
+### PG-402 Readiness and smoke verification
+
+- Primary owner: `release-verification`
+- Priority: High
+- Dependencies: PG-102, PG-401
+
+**Problem**
+
+`/ready` proves some dependencies are reachable, but rollout safety requires end-to-end runtime verification in the active mode.
+
+**Scope**
+
+- Keep readiness cheap.
+- Expand smoke tests to verify real job flow.
+
+**Target files**
+
+- `Prompt Gateway – Control Plane /src/ControlPlane.Api/Health/AwsDependenciesHealthCheck.cs`
+- `scripts/smoke-test.sh`
+- `scripts/set-processing-mode.sh`
+
+**Acceptance criteria**
+
+- Readiness remains fast and operationally useful.
+- Smoke verification covers:
+  - job submission
+  - dispatch
+  - provider execution
+  - result ingestion
+  - successful completion in the active mode
+
+### PG-403 Migration runbook hardening
+
+- Primary owner: `lambda-platform`
+- Sidecar: `release-verification`
+- Priority: Medium-High
+- Dependencies: PG-401, PG-402
+
+**Scope**
+
+- Update migration plans and cutover procedures to include explicit gates and rollback criteria.
+
+**Target files**
+
+- `docs/ECS_TO_LAMBDA_PLAN.md`
+- `docs/DEPLOYMENT_PLAN.md`
+- `scripts/set-processing-mode.sh`
+
+**Acceptance criteria**
+
+- Dev, staging, and prod each have:
+  - cutover steps
+  - rollback steps
+  - verification gates
+  - evidence expectations before promotion
+
+---
+
+## Phase 5 – Cleanup And Platform Decision
+
+### PG-501 Retire ECS provider worker path
+
+- Primary owner: `lambda-platform`
+- Sidecar: `release-verification`
+- Priority: Medium
+- Dependencies: PG-201 through PG-403
+
+**Scope**
+
+- Remove ECS provider-worker runtime only after Lambda mode is proven through at least one full promotion cycle.
+
+**Target files**
+
+- `infra/terraform/modules/ecs-service/main.tf`
+- `infra/terraform/README.md`
+- rollout scripts and docs as needed
+
+**Acceptance criteria**
+
+- Lambda provider path is the only active provider execution runtime.
+- Rollback evidence and migration confidence are documented before removal.
+
+### PG-502 Final HTTP control-plane platform decision
+
+- Primary owner: `control-plane-core`
+- Sidecar: `lambda-platform`
+- Priority: Medium
+- Dependencies: PG-401 through PG-501
+
+**Problem**
+
+The HTTP API can remain on ECS or move to Lambda/API Gateway later, but that choice should be deliberate rather than accidental.
+
+**Scope**
+
+- Decide whether the API remains containerized or also moves serverless.
+- Document operational tradeoffs.
+
+**Target files**
+
+- `docs/ECS_TO_LAMBDA_PLAN.md`
+- `Prompt Gateway – Control Plane /src/ControlPlane.Api/Program.cs`
+- infrastructure docs and modules as needed
+
+**Acceptance criteria**
+
+- A platform decision is documented.
+- The repo and docs reflect that decision clearly.
+- Any retained temporary architecture is called out explicitly.
+
+---
+
+## Suggested Execution Order
+
+1. PG-001
+2. PG-002
+3. PG-003
+4. PG-101
+5. PG-102
+6. PG-103
+7. PG-201
+8. PG-202
+9. PG-203
+10. PG-301
+11. PG-302
+12. PG-303
+13. PG-401
+14. PG-402
+15. PG-403
+16. PG-501
+17. PG-502
+
+## Recommended Milestone Gates
+
+### Milestone A – Safe shared runtime wiring
+
+Complete:
+
+- PG-001
+- PG-002
+- PG-003
+
+### Milestone B – Safe client intake
+
+Complete:
+
+- PG-101
+- PG-102
+- PG-103
+
+### Milestone C – Safe provider behavior in Lambda mode
+
+Complete:
+
+- PG-201
+- PG-202
+- PG-203
+
+### Milestone D – Safe async processing at scale
+
+Complete:
+
+- PG-301
+- PG-302
+- PG-303
+
+### Milestone E – Promotion-ready migration
+
+Complete:
+
+- PG-401
+- PG-402
+- PG-403
+
+### Milestone F – Post-migration cleanup
+
+Complete:
+
+- PG-501
+- PG-502

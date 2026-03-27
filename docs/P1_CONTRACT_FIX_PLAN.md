@@ -1,5 +1,16 @@
 # Prompt Gateway – P1 Contract Fix Plan
 
+> **Document status: Historical change record**
+>
+> This file records the contract-fix planning work and rollout intent. Keep it for implementation history and context, but do not treat it as the primary description of the current live contract.
+>
+> Use these docs first for the current implemented contract and runtime behavior:
+>
+> - `docs/README.md`
+> - `Prompt Gateway – Control Plane /src/ControlPlane.Api/README.md`
+> - `Prompt Gateway Provider - OpenAI/README.md`
+> - `docs/IMPLEMENTATION_BACKLOG.md`
+
 This plan addresses P1: the dispatch contract mismatch between Control Plane and Provider Worker that can cause prompt-load failures at runtime.
 
 ---
@@ -140,4 +151,3 @@ Phase C (Cleanup):
 - [ ] Phase A deployed
 - [ ] Phase B deployed
 - [ ] Phase C cleanup complete
-

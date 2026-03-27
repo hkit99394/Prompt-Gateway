@@ -1,5 +1,16 @@
 # Prompt Gateway - P3 Retry Policy Hardening Plan
 
+> **Document status: Historical change record**
+>
+> This file records retry-policy hardening work and intended behavior changes. Keep it as planning and implementation history, but do not treat it as the primary source of truth for current runtime behavior.
+>
+> Use these docs first for the current implemented system:
+>
+> - `docs/README.md`
+> - `Prompt Gateway Provider - OpenAI/README.md`
+> - `Prompt Gateway – Control Plane /src/ControlPlane.Api/README.md`
+> - `docs/IMPLEMENTATION_BACKLOG.md`
+
 This plan addresses P3: provider retry logic is currently too broad and retries generic exceptions.
 
 ---
@@ -123,4 +134,3 @@ Phase C:
 - [ ] P3-6 Docs updated
 - [ ] Staging validation complete
 - [ ] Production rollout complete
-

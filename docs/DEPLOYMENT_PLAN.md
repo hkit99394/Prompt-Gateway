@@ -2,7 +2,20 @@
 
 This document describes the target architecture, infrastructure-as-code layout, CI/CD workflows, and first-deploy procedures for the Prompt Gateway Control Plane and Provider Worker. Each section is broken into detailed steps and tasks.
 
-> **Implementation status:** T-2.1 creates the Terraform directory structure and skeleton files only. Module `main.tf` files contain placeholder comments with no resource definitions; outputs return `null`. **`terraform apply` will fail until T-2.2 through T-2.8 are implemented.** Complete the module implementation tasks before deploying.
+> **Document status: Historical plan record**
+>
+> This file captures the original deployment and CI/CD planning work. It is no longer the primary source of truth for the current implementation state.
+>
+> Use these docs first for the current implemented system:
+>
+> - `docs/README.md`
+> - `docs/IMPLEMENTATION_BACKLOG.md`
+> - `infra/terraform/README.md`
+> - `Prompt Gateway – Control Plane /src/ControlPlane.Api/README.md`
+> - `Prompt Gateway Provider - OpenAI/README.md`
+>
+> Historical note:
+> the older statement that Terraform was only skeleton code is no longer accurate for the current repository state. Keep this document as planning history unless you are intentionally updating the historical plan.
 
 ---
 

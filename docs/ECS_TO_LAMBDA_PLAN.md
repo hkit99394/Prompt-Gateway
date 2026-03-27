@@ -1,5 +1,17 @@
 # ECS To Lambda Plan
 
+> **Document status: Planning record**
+>
+> This file describes migration strategy and decision sequencing. It is useful for architecture context, but it is not the primary source of truth for the current implementation state.
+>
+> Use these docs first for the current implemented system:
+>
+> - `docs/README.md`
+> - `docs/IMPLEMENTATION_BACKLOG.md`
+> - `infra/terraform/README.md`
+> - `Prompt Gateway – Control Plane /src/ControlPlane.Api/README.md`
+> - `Prompt Gateway Provider - OpenAI/README.md`
+
 ## Short answer
 
 Yes, this project can move from ECS/Fargate to Lambda, but not as a direct lift-and-shift.
