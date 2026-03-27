@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prompt Gateway Review"
+  short_description: "Repeatable Prompt Gateway reviews"
+  default_prompt: "Review the Prompt Gateway repository and summarize architecture, strengths, risks, migration status, test health, and recommended next steps."
