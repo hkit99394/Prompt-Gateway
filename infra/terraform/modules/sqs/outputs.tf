@@ -26,7 +26,17 @@ output "dispatch_queue_arn" {
   value       = aws_sqs_queue.dispatch.arn
 }
 
+output "dispatch_queue_name" {
+  description = "Dispatch queue name"
+  value       = aws_sqs_queue.dispatch.name
+}
+
 output "result_queue_arn" {
   description = "Result queue ARN"
   value       = aws_sqs_queue.result.arn
+}
+
+output "result_queue_name" {
+  description = "Result queue name"
+  value       = aws_sqs_queue.result.name
 }

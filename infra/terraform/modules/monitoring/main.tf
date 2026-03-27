@@ -129,6 +129,370 @@ resource "aws_cloudwatch_metric_alarm" "sqs_dlq_messages" {
   }
 }
 
+resource "aws_cloudwatch_metric_alarm" "dispatch_queue_visible_messages" {
+  alarm_name          = "${local.name_prefix}-dispatch-queue-visible"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = var.dispatch_queue_visible_threshold
+  alarm_description   = "Dispatch queue has a visible backlog that may indicate provider dispatch pressure"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = var.dispatch_queue_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+
+  tags = {
+    Name        = "${local.name_prefix}-dispatch-queue-visible"
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "dispatch_queue_oldest_age" {
+  alarm_name          = "${local.name_prefix}-dispatch-queue-age"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = var.dispatch_queue_age_threshold_seconds
+  alarm_description   = "Dispatch queue oldest message age is elevated, which suggests consumer lag"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = var.dispatch_queue_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+
+  tags = {
+    Name        = "${local.name_prefix}-dispatch-queue-age"
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "result_queue_visible_messages" {
+  alarm_name          = "${local.name_prefix}-result-queue-visible"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = var.result_queue_visible_threshold
+  alarm_description   = "Result queue has a visible backlog that may indicate ingestion pressure"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = var.result_queue_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+
+  tags = {
+    Name        = "${local.name_prefix}-result-queue-visible"
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "result_queue_oldest_age" {
+  alarm_name          = "${local.name_prefix}-result-queue-age"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = var.result_queue_age_threshold_seconds
+  alarm_description   = "Result queue oldest message age is elevated, which suggests ingestion lag"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = var.result_queue_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+
+  tags = {
+    Name        = "${local.name_prefix}-result-queue-age"
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "provider_lambda_errors" {
+  count = var.provider_lambda_function_name != null ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-provider-lambda-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Provider worker Lambda is returning errors"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.provider_lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "provider_lambda_throttles" {
+  count = var.provider_lambda_function_name != null ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-provider-lambda-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Provider worker Lambda is being throttled"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.provider_lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "provider_lambda_duration" {
+  count = var.provider_lambda_function_name != null ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-provider-lambda-duration"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Duration"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = max(1000, floor(var.provider_lambda_timeout_seconds * 1000 * 0.8))
+  alarm_description   = "Provider worker Lambda duration is approaching its timeout budget"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.provider_lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "provider_lambda_concurrency" {
+  count = var.provider_lambda_function_name != null && var.provider_lambda_reserved_concurrency > 0 ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-provider-lambda-concurrency"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ConcurrentExecutions"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = max(1, floor(var.provider_lambda_reserved_concurrency * 0.8))
+  alarm_description   = "Provider worker Lambda concurrency is near its reserved limit"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.provider_lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "result_lambda_errors" {
+  count = var.result_lambda_function_name != null ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-result-lambda-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Result ingestion Lambda is returning errors"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.result_lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "result_lambda_throttles" {
+  count = var.result_lambda_function_name != null ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-result-lambda-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Result ingestion Lambda is being throttled"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.result_lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "result_lambda_duration" {
+  count = var.result_lambda_function_name != null ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-result-lambda-duration"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Duration"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = max(1000, floor(var.result_lambda_timeout_seconds * 1000 * 0.8))
+  alarm_description   = "Result ingestion Lambda duration is approaching its timeout budget"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.result_lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "result_lambda_concurrency" {
+  count = var.result_lambda_function_name != null && var.result_lambda_reserved_concurrency > 0 ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-result-lambda-concurrency"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ConcurrentExecutions"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = max(1, floor(var.result_lambda_reserved_concurrency * 0.8))
+  alarm_description   = "Result ingestion Lambda concurrency is near its reserved limit"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.result_lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "outbox_lambda_errors" {
+  count = var.outbox_lambda_function_name != null ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-outbox-lambda-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Outbox dispatch Lambda is returning errors"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.outbox_lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "outbox_lambda_throttles" {
+  count = var.outbox_lambda_function_name != null ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-outbox-lambda-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Outbox dispatch Lambda is being throttled"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.outbox_lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "outbox_lambda_duration" {
+  count = var.outbox_lambda_function_name != null ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-outbox-lambda-duration"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Duration"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = max(1000, floor(var.outbox_lambda_timeout_seconds * 1000 * 0.8))
+  alarm_description   = "Outbox dispatch Lambda duration is approaching its timeout budget"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.outbox_lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "outbox_lambda_concurrency" {
+  count = var.outbox_lambda_function_name != null && var.outbox_lambda_reserved_concurrency > 0 ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-outbox-lambda-concurrency"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ConcurrentExecutions"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = max(1, floor(var.outbox_lambda_reserved_concurrency * 0.8))
+  alarm_description   = "Outbox dispatch Lambda concurrency is near its reserved limit"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.outbox_lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+}
+
 # T-8.5: DynamoDB throttles (write throttle events)
 resource "aws_cloudwatch_metric_alarm" "dynamodb_throttles" {
   alarm_name          = "${local.name_prefix}-dynamodb-throttles"

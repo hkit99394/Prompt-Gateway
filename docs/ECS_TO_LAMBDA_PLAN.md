@@ -215,6 +215,8 @@ Work:
 Exit criteria:
 
 - No queue-processing path depends on ECS.
+- Mode verification and smoke-test gates exist for the active runtime.
+- Monitoring covers Lambda errors, throttles, duration pressure, and primary queue backlog.
 
 ### Phase 4: Decide on the API
 
@@ -245,6 +247,32 @@ Work:
 - Remove ECS cluster, services, task definitions, ALB, and ECR repos if no longer needed.
 - Update deployment scripts and runbooks.
 - Update monitoring dashboards and alarms to Lambda metrics and SQS backlog metrics.
+
+## Rollout gates
+
+Before promoting Lambda mode between environments:
+
+1. Run `./scripts/set-processing-mode.sh --mode lambda --verify-only --run-smoke-test`.
+2. Confirm no CloudWatch alarms are active for:
+   - Lambda `Errors`
+   - Lambda `Throttles`
+   - Lambda duration-pressure alarms
+   - dispatch/result queue backlog or oldest-message-age alarms
+   - DLQ depth
+3. Record the exact image tags and Lambda package artifacts used for the deploy.
+4. Keep the rollback command prepared:
+   - `./scripts/set-processing-mode.sh --mode ecs`
+
+Promotion expectations:
+
+- Dev proves the runtime wiring and smoke path.
+- Staging proves the same build set outside the bootstrap environment.
+- Prod only moves after staging evidence exists for the exact same artifacts.
+
+Rollback expectations:
+
+- If verification fails, stop the promotion immediately.
+- Switch back to ECS mode, rerun `--verify-only --run-smoke-test`, and attach the failing smoke-test and alarm evidence to the deployment record.
 
 ## Main risks
 

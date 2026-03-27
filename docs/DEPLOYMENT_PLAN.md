@@ -255,7 +255,28 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | 4.4 | T-5.4.4 | `GET /jobs/{job_id}` → job status |
 | 4.5 | T-5.4.5 | Wait for job completion, `GET /jobs/{job_id}/result` → 200 |
 
-**Automation:** Run `./scripts/first-deploy-phase4.sh` to execute T-5.4.1 – T-5.4.5 after either ECS mode or Lambda mode is deployed. Uses `scripts/smoke-test.sh`; resolves BASE_URL from the environment’s ALB (or set `BASE_URL` / `HEALTH_CHECK_BASE_URL`), uploads a smoke prompt fixture to S3 by default, and resolves the API key from SSM (dev) or Secrets Manager (staging/prod). Optional env vars: `ENV`, `BASE_URL`, `API_KEY`, `AWS_REGION`, `SMOKE_INPUT_REF`, `SMOKE_PROMPT_BUCKET`, `SMOKE_PROMPT_TEXT`, `SMOKE_SKIP_PROMPT_UPLOAD=true`. Use `--insecure` for HTTPS with self-signed or ALB hostname when not using a custom domain. Requires Phase 1–3 complete and `jq` installed.
+**Automation:** Run `./scripts/first-deploy-phase4.sh` to execute T-5.4.1 – T-5.4.5 after either ECS mode or Lambda mode is deployed. Uses `scripts/smoke-test.sh`; resolves BASE_URL from the environment’s ALB (or set `BASE_URL` / `HEALTH_CHECK_BASE_URL`), uploads a smoke prompt fixture to S3 by default, and resolves the API key from SSM (dev) or Secrets Manager (staging/prod). Optional env vars: `ENV`, `BASE_URL`, `API_KEY`, `AWS_REGION`, `SMOKE_INPUT_REF`, `SMOKE_PROMPT_BUCKET`, `SMOKE_PROMPT_TEXT`, `SMOKE_SKIP_PROMPT_UPLOAD=true`. Use `--insecure` for HTTPS with self-signed or ALB hostname when not using a custom domain. Requires Phase 1–3 complete and `jq` installed. On failure, the smoke test now prints the final `GET /jobs/{jobId}` payload and `GET /jobs/{jobId}/events` timeline to speed up diagnosis.
+
+**Verification gate:** `./scripts/set-processing-mode.sh --mode ecs|lambda --verify-only --run-smoke-test` first checks that the expected runtime is active and the alternate runtime is disabled, then runs the end-to-end smoke test in the selected mode. This is the recommended promotion gate for dev and staging.
+
+**Promotion evidence**
+
+- Dev:
+  - `set-processing-mode.sh --verify-only --run-smoke-test` passes
+  - no active CloudWatch alarms for API 5xx, Lambda errors/throttles, queue age/backlog, or DLQ depth
+  - smoke test evidence is captured in the deployment log
+- Staging:
+  - repeat the dev gate after deploying the same image tag / Lambda artifact set
+  - capture a successful smoke-test run and confirm no backlog alarms are active for at least one scheduler interval
+- Prod:
+  - promote only after staging evidence exists for the same build set
+  - keep the prior deploy identifiers and the rollback command ready before switching modes
+
+**Rollback gate**
+
+- If `/ready` fails, the smoke test fails, or any Lambda/queue alarm trips during cutover, stop the promotion.
+- Roll back by restoring the previous Terraform apply inputs or switching the environment back with `./scripts/set-processing-mode.sh --mode ecs`.
+- Re-run `--verify-only --run-smoke-test` after rollback and keep the failure evidence with the deployment notes.
 
 For Lambda-mode promotion while keeping ECS mode as a fallback, use `./scripts/promote-lambda-mode.sh staging` and then `./scripts/promote-lambda-mode.sh prod --check-staging`.
 

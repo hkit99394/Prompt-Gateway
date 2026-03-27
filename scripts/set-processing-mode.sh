@@ -15,11 +15,12 @@
 #   - PROVIDER_LAMBDA_PACKAGE_PATH: override provider zip path
 #   - RESULT_LAMBDA_PACKAGE_PATH: override result zip path
 #   - OUTBOX_LAMBDA_PACKAGE_PATH: override outbox zip path
+#   - SMOKE_TEST_INSECURE=true: pass --insecure when running the optional smoke-test gate
 #
 # Usage:
-#   ./scripts/set-processing-mode.sh --mode ecs [--plan-only] [--skip-verify]
-#   ./scripts/set-processing-mode.sh --mode lambda [--plan-only] [--skip-package] [--skip-verify]
-#   ./scripts/set-processing-mode.sh --mode ecs --verify-only
+#   ./scripts/set-processing-mode.sh --mode ecs [--plan-only] [--skip-verify] [--run-smoke-test]
+#   ./scripts/set-processing-mode.sh --mode lambda [--plan-only] [--skip-package] [--skip-verify] [--run-smoke-test]
+#   ./scripts/set-processing-mode.sh --mode ecs --verify-only [--run-smoke-test]
 
 set -euo pipefail
 
@@ -32,6 +33,7 @@ PLAN_ONLY=false
 SKIP_PACKAGE=false
 SKIP_VERIFY=false
 VERIFY_ONLY=false
+RUN_SMOKE_TEST=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -57,6 +59,10 @@ while [ $# -gt 0 ]; do
       ;;
     --verify-only)
       VERIFY_ONLY=true
+      shift
+      ;;
+    --run-smoke-test)
+      RUN_SMOKE_TEST=true
       shift
       ;;
     *)
@@ -107,6 +113,17 @@ lambda_function_exists() {
 event_rule_exists() {
   local rule_name="$1"
   aws events describe-rule --name "$rule_name" --region "$REGION" >/dev/null 2>&1
+}
+
+run_smoke_test_gate() {
+  local smoke_args=()
+
+  echo "Running smoke-test gate for $MODE mode..."
+  if [ "${SMOKE_TEST_INSECURE:-false}" = "true" ]; then
+    smoke_args+=("--insecure")
+  fi
+
+  ENV="$ENV" AWS_REGION="$REGION" "$REPO_ROOT/scripts/first-deploy-phase4.sh" "${smoke_args[@]}"
 }
 
 verify_mode() {
@@ -255,6 +272,9 @@ echo ""
 
 if [ "$VERIFY_ONLY" = true ]; then
   verify_mode
+  if [ "$RUN_SMOKE_TEST" = true ]; then
+    run_smoke_test_gate
+  fi
   exit 0
 fi
 
@@ -311,3 +331,7 @@ if [ "$SKIP_VERIFY" = true ]; then
 fi
 
 verify_mode
+
+if [ "$RUN_SMOKE_TEST" = true ]; then
+  run_smoke_test_gate
+fi

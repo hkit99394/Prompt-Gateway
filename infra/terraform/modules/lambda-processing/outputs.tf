@@ -12,3 +12,33 @@ output "outbox_lambda_function_name" {
   description = "Outbox dispatch Lambda function name"
   value       = var.enable ? aws_lambda_function.outbox[0].function_name : null
 }
+
+output "provider_lambda_timeout_seconds" {
+  description = "Provider worker Lambda timeout in seconds"
+  value       = var.provider_lambda_timeout
+}
+
+output "result_lambda_timeout_seconds" {
+  description = "Result ingestion Lambda timeout in seconds"
+  value       = var.result_lambda_timeout
+}
+
+output "outbox_lambda_timeout_seconds" {
+  description = "Outbox dispatch Lambda timeout in seconds"
+  value       = var.outbox_lambda_timeout
+}
+
+output "provider_lambda_reserved_concurrency" {
+  description = "Provider worker Lambda reserved concurrency"
+  value       = var.provider_lambda_reserved_concurrency
+}
+
+output "result_lambda_reserved_concurrency" {
+  description = "Result ingestion Lambda reserved concurrency"
+  value       = var.result_lambda_reserved_concurrency
+}
+
+output "outbox_lambda_reserved_concurrency" {
+  description = "Outbox dispatch Lambda reserved concurrency"
+  value       = var.outbox_lambda_reserved_concurrency
+}

@@ -477,6 +477,14 @@ Monitoring currently favors ECS and generic DLQ visibility more than Lambda runt
   - primary queue age or visible backlog
   - reserved concurrency pressure where relevant
 
+**Status:** Complete
+
+**Completion notes**
+
+- Monitoring now includes Lambda alarms for provider, result-ingestion, and outbox-dispatch errors, throttles, duration pressure, and concurrency pressure.
+- Dispatch and result queues now have primary-backlog alarms for visible message count and oldest message age.
+- Environment stacks pass queue names and Lambda runtime metadata into the monitoring module.
+
 ### PG-402 Readiness and smoke verification
 
 - Primary owner: `release-verification`
@@ -508,6 +516,14 @@ Monitoring currently favors ECS and generic DLQ visibility more than Lambda runt
   - result ingestion
   - successful completion in the active mode
 
+**Status:** Complete
+
+**Completion notes**
+
+- `/ready` still performs a lightweight dependency check, but now also validates that the configured DynamoDB GSI exists.
+- `scripts/smoke-test.sh` now prints job snapshot and event-history diagnostics on resume failure, failed jobs, result-fetch failure, or timeout.
+- `scripts/set-processing-mode.sh --run-smoke-test` can use the smoke test as an explicit verification gate for the selected processing mode.
+
 ### PG-403 Migration runbook hardening
 
 - Primary owner: `lambda-platform`
@@ -532,6 +548,14 @@ Monitoring currently favors ECS and generic DLQ visibility more than Lambda runt
   - rollback steps
   - verification gates
   - evidence expectations before promotion
+
+**Status:** Complete
+
+**Completion notes**
+
+- Deployment docs now describe the mode-verification plus smoke-test gate and the evidence required before promotion.
+- The ECS-to-Lambda migration plan now includes rollback expectations and monitoring gates for Lambda-mode cutovers.
+- `set-processing-mode.sh` now supports running the smoke-test gate directly as part of rollout verification.
 
 ---
 

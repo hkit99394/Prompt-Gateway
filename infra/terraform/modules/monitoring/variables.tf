@@ -31,6 +31,16 @@ variable "sqs_dlq_name" {
   type        = string
 }
 
+variable "dispatch_queue_name" {
+  description = "Primary dispatch queue name for backlog alarms"
+  type        = string
+}
+
+variable "result_queue_name" {
+  description = "Primary result queue name for backlog alarms"
+  type        = string
+}
+
 variable "dynamodb_table_name" {
   description = "DynamoDB main table name (for throttle alarms)"
   type        = string
@@ -70,4 +80,82 @@ variable "ecs_memory_threshold_percent" {
   description = "Alarm when ECS API service memory utilization exceeds this percentage"
   type        = number
   default     = 85
+}
+
+variable "dispatch_queue_visible_threshold" {
+  description = "Alarm when visible messages on the dispatch queue exceed this threshold"
+  type        = number
+  default     = 10
+}
+
+variable "dispatch_queue_age_threshold_seconds" {
+  description = "Alarm when the oldest message on the dispatch queue exceeds this age"
+  type        = number
+  default     = 300
+}
+
+variable "result_queue_visible_threshold" {
+  description = "Alarm when visible messages on the result queue exceed this threshold"
+  type        = number
+  default     = 10
+}
+
+variable "result_queue_age_threshold_seconds" {
+  description = "Alarm when the oldest message on the result queue exceeds this age"
+  type        = number
+  default     = 300
+}
+
+variable "provider_lambda_function_name" {
+  description = "Provider worker Lambda function name for runtime alarms"
+  type        = string
+  default     = null
+}
+
+variable "result_lambda_function_name" {
+  description = "Result ingestion Lambda function name for runtime alarms"
+  type        = string
+  default     = null
+}
+
+variable "outbox_lambda_function_name" {
+  description = "Outbox dispatch Lambda function name for runtime alarms"
+  type        = string
+  default     = null
+}
+
+variable "provider_lambda_timeout_seconds" {
+  description = "Provider worker Lambda timeout in seconds for duration alarms"
+  type        = number
+  default     = 120
+}
+
+variable "result_lambda_timeout_seconds" {
+  description = "Result ingestion Lambda timeout in seconds for duration alarms"
+  type        = number
+  default     = 60
+}
+
+variable "outbox_lambda_timeout_seconds" {
+  description = "Outbox dispatch Lambda timeout in seconds for duration alarms"
+  type        = number
+  default     = 60
+}
+
+variable "provider_lambda_reserved_concurrency" {
+  description = "Provider worker Lambda reserved concurrency for pressure alarms"
+  type        = number
+  default     = 5
+}
+
+variable "result_lambda_reserved_concurrency" {
+  description = "Result ingestion Lambda reserved concurrency for pressure alarms"
+  type        = number
+  default     = 5
+}
+
+variable "outbox_lambda_reserved_concurrency" {
+  description = "Outbox dispatch Lambda reserved concurrency for pressure alarms"
+  type        = number
+  default     = 1
 }

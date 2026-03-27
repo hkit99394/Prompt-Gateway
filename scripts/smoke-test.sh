@@ -31,6 +31,22 @@ fi
 echo "Smoke test: BASE_URL=$BASE_URL"
 echo "Smoke test: INPUT_REF=$INPUT_REF"
 
+print_job_diagnostics() {
+  local job_id="$1"
+
+  if [ -z "$job_id" ]; then
+    return
+  fi
+
+  echo "  Diagnostic: GET /jobs/$job_id"
+  curl -s "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/jobs/$job_id" || true
+  echo ""
+
+  echo "  Diagnostic: GET /jobs/$job_id/events"
+  curl -s "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/jobs/$job_id/events" || true
+  echo ""
+}
+
 # T-7.3: GET /health
 echo "  GET /health..."
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${CURL_OPTS[@]}" "$BASE_URL/health" || true)
@@ -97,6 +113,7 @@ if [ "$REQUIRES_RESUME" = "true" ]; then
   if [ "$RESUME_HTTP_CODE" != "200" ] && [ "$RESUME_HTTP_CODE" != "202" ]; then
     echo "  FAIL: POST /jobs/$JOB_ID/resume returned $RESUME_HTTP_CODE (expected 200 or 202)"
     echo "  Response: $RESUME_BODY"
+    print_job_diagnostics "$JOB_ID"
     exit 1
   fi
 
@@ -122,6 +139,7 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
   if [ "$STATE" = "Failed" ] || [ "$STATE" = "5" ]; then
     echo "  FAIL: Job failed (T-7.8)"
     echo "  Response: $JOB_RESPONSE"
+    print_job_diagnostics "$JOB_ID"
     exit 1
   fi
 
@@ -132,6 +150,7 @@ done
 
 if [ "$STATE" != "Completed" ] && [ "$STATE" != "4" ]; then
   echo "  FAIL: Timeout after ${TIMEOUT}s, state=$STATE"
+  print_job_diagnostics "$JOB_ID"
   exit 1
 fi
 
@@ -140,6 +159,7 @@ echo "  GET /jobs/$JOB_ID/result..."
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/jobs/$JOB_ID/result" || true)
 if [ "$HTTP_CODE" != "200" ]; then
   echo "  FAIL: GET /jobs/$JOB_ID/result returned $HTTP_CODE (expected 200)"
+  print_job_diagnostics "$JOB_ID"
   exit 1
 fi
 echo "  OK: GET /jobs/$JOB_ID/result -> 200"

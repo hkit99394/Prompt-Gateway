@@ -383,7 +383,19 @@ public class ApiSecurityTests
                 JobStore.ListAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<JobSummary>>(Array.Empty<JobSummary>()));
                 DynamoDb.DescribeTableAsync(Arg.Any<DescribeTableRequest>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new DescribeTableResponse()));
+                    .Returns(Task.FromResult(new DescribeTableResponse
+                    {
+                        Table = new TableDescription
+                        {
+                            GlobalSecondaryIndexes = new List<GlobalSecondaryIndexDescription>
+                            {
+                                new()
+                                {
+                                    IndexName = "gsi1"
+                                }
+                            }
+                        }
+                    }));
                 Sqs.GetQueueAttributesAsync(Arg.Any<GetQueueAttributesRequest>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult(new GetQueueAttributesResponse()));
 

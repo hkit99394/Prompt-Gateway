@@ -132,12 +132,23 @@ module "lambda_processing" {
 module "monitoring" {
   source = "../../modules/monitoring"
 
-  environment             = var.environment
-  alb_arn_suffix          = module.ecs_service.alb_arn_suffix
-  target_group_arn_suffix = module.ecs_service.api_target_group_arn_suffix
-  ecs_cluster_name        = module.ecs_service.cluster_name
-  ecs_api_service_name    = module.ecs_service.api_service_name
-  sqs_dlq_name            = module.sqs.dlq_name
-  dynamodb_table_name     = module.dynamodb.table_name
-  alarm_email             = var.alarm_email
+  environment                          = var.environment
+  alb_arn_suffix                       = module.ecs_service.alb_arn_suffix
+  target_group_arn_suffix              = module.ecs_service.api_target_group_arn_suffix
+  ecs_cluster_name                     = module.ecs_service.cluster_name
+  ecs_api_service_name                 = module.ecs_service.api_service_name
+  sqs_dlq_name                         = module.sqs.dlq_name
+  dispatch_queue_name                  = module.sqs.dispatch_queue_name
+  result_queue_name                    = module.sqs.result_queue_name
+  dynamodb_table_name                  = module.dynamodb.table_name
+  provider_lambda_function_name        = module.lambda_processing.provider_lambda_function_name
+  result_lambda_function_name          = module.lambda_processing.result_lambda_function_name
+  outbox_lambda_function_name          = module.lambda_processing.outbox_lambda_function_name
+  provider_lambda_timeout_seconds      = module.lambda_processing.provider_lambda_timeout_seconds
+  result_lambda_timeout_seconds        = module.lambda_processing.result_lambda_timeout_seconds
+  outbox_lambda_timeout_seconds        = module.lambda_processing.outbox_lambda_timeout_seconds
+  provider_lambda_reserved_concurrency = module.lambda_processing.provider_lambda_reserved_concurrency
+  result_lambda_reserved_concurrency   = module.lambda_processing.result_lambda_reserved_concurrency
+  outbox_lambda_reserved_concurrency   = module.lambda_processing.outbox_lambda_reserved_concurrency
+  alarm_email                          = var.alarm_email
 }
