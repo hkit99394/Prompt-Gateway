@@ -143,6 +143,27 @@ http_api_exists() {
   [ -n "$api_id" ] && [ "$api_id" != "None" ]
 }
 
+lambda_mappings_all_enabled() {
+  local function_name="$1"
+  local mappings_json
+
+  mappings_json=$(aws lambda list-event-source-mappings \
+    --function-name "$function_name" \
+    --region "$REGION" \
+    --output json)
+
+  echo "$mappings_json" | jq -e '.EventSourceMappings | length > 0 and all(.[]; .State == "Enabled")' >/dev/null 2>&1
+}
+
+lambda_mapping_states() {
+  local function_name="$1"
+  aws lambda list-event-source-mappings \
+    --function-name "$function_name" \
+    --region "$REGION" \
+    --query 'EventSourceMappings[].State' \
+    --output text 2>/dev/null || true
+}
+
 run_smoke_test_gate() {
   local smoke_args=()
 
@@ -246,23 +267,15 @@ verify_mode() {
       exit 1
     fi
 
-    provider_mapping_state=$(aws lambda list-event-source-mappings \
-      --function-name "$PROVIDER_LAMBDA_NAME" \
-      --region "$REGION" \
-      --query 'EventSourceMappings[0].State' \
-      --output text)
-    result_mapping_state=$(aws lambda list-event-source-mappings \
-      --function-name "$RESULT_LAMBDA_NAME" \
-      --region "$REGION" \
-      --query 'EventSourceMappings[0].State' \
-      --output text)
+    provider_mapping_states="$(lambda_mapping_states "$PROVIDER_LAMBDA_NAME")"
+    result_mapping_states="$(lambda_mapping_states "$RESULT_LAMBDA_NAME")"
 
-    if [ "$provider_mapping_state" != "Enabled" ]; then
-      echo "FAIL: Provider Lambda event source mapping is not enabled (state=$provider_mapping_state)"
+    if ! lambda_mappings_all_enabled "$PROVIDER_LAMBDA_NAME"; then
+      echo "FAIL: Provider Lambda event source mappings are not all enabled (states=$provider_mapping_states)"
       exit 1
     fi
-    if [ "$result_mapping_state" != "Enabled" ]; then
-      echo "FAIL: Result Lambda event source mapping is not enabled (state=$result_mapping_state)"
+    if ! lambda_mappings_all_enabled "$RESULT_LAMBDA_NAME"; then
+      echo "FAIL: Result Lambda event source mappings are not all enabled (states=$result_mapping_states)"
       exit 1
     fi
     if ! event_rule_exists "$OUTBOX_RULE_NAME"; then

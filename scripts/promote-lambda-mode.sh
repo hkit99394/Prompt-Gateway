@@ -13,8 +13,9 @@
 #
 # Usage:
 #   ./scripts/promote-lambda-mode.sh staging
-#   ./scripts/promote-lambda-mode.sh prod --check-staging
+#   ./scripts/promote-lambda-mode.sh prod
 #   ./scripts/promote-lambda-mode.sh prod --skip-smoke
+#   ./scripts/promote-lambda-mode.sh prod --skip-staging-check
 
 set -euo pipefail
 
@@ -24,6 +25,7 @@ REGION="${AWS_REGION:-us-east-1}"
 HTTP_EDGE_MODE="${HTTP_EDGE_MODE:-lambda}"
 TARGET_ENV="${1:-}"
 CHECK_STAGING=false
+STAGING_CHECK_EXPLICIT=false
 SKIP_SMOKE=false
 SKIP_VERIFY=false
 
@@ -33,6 +35,12 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --check-staging)
       CHECK_STAGING=true
+      STAGING_CHECK_EXPLICIT=true
+      shift
+      ;;
+    --skip-staging-check)
+      CHECK_STAGING=false
+      STAGING_CHECK_EXPLICIT=true
       shift
       ;;
     --skip-smoke)
@@ -51,8 +59,12 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$TARGET_ENV" != "staging" ] && [ "$TARGET_ENV" != "prod" ]; then
-  echo "Usage: ./scripts/promote-lambda-mode.sh <staging|prod> [--check-staging] [--skip-smoke] [--skip-verify]"
+  echo "Usage: ./scripts/promote-lambda-mode.sh <staging|prod> [--check-staging|--skip-staging-check] [--skip-smoke] [--skip-verify]"
   exit 1
+fi
+
+if [ "$TARGET_ENV" = "prod" ] && [ "$STAGING_CHECK_EXPLICIT" = false ]; then
+  CHECK_STAGING=true
 fi
 
 if [ "$TARGET_ENV" = "prod" ] && [ "$CHECK_STAGING" = true ]; then

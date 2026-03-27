@@ -26,6 +26,8 @@ ENV="${ENV:-dev}"
 REGION="${AWS_REGION:-us-east-1}"
 SKIP_SECRETS=false
 SKIP_SSM=false
+PLACEHOLDER_API_KEYS='["change-me-dev-key"]'
+PLACEHOLDER_OPENAI_KEY="sk-placeholder-replace-with-real-openai-key"
 
 for arg in "$@"; do
   case $arg in
@@ -46,63 +48,147 @@ RESULT_QUEUE="prompt-gateway-${ENV}-result"
 PROMPTS_BUCKET="prompt-gateway-${ENV}-prompts-${ACCOUNT}"
 RESULTS_BUCKET="prompt-gateway-${ENV}-results-${ACCOUNT}"
 SSM_PREFIX="/prompt-gateway/${ENV}"
+IS_DEV=false
+[ "$ENV" = "dev" ] && IS_DEV=true
+
+existing_ssm_parameter() {
+  local parameter_name="$1"
+  aws ssm get-parameter \
+    --name "$parameter_name" \
+    --with-decryption \
+    --region "$REGION" \
+    --query Parameter.Value \
+    --output text 2>/dev/null || true
+}
+
+existing_secret_string() {
+  local secret_name="$1"
+  aws secretsmanager get-secret-value \
+    --secret-id "$secret_name" \
+    --region "$REGION" \
+    --query SecretString \
+    --output text 2>/dev/null || true
+}
+
+require_non_placeholder() {
+  local label="$1"
+  local value="$2"
+  local placeholder="$3"
+
+  if [ "$value" = "$placeholder" ]; then
+    echo "  FAIL: $label is still using the placeholder value. Provide a real value before continuing."
+    exit 1
+  fi
+}
+
+validate_api_keys_json() {
+  local value="$1"
+  if ! echo "$value" | jq -e 'type == "array" and length > 0 and all(.[]; type == "string" and length > 0)' >/dev/null 2>&1; then
+    echo "  FAIL: API_KEYS_JSON must be a non-empty JSON array of non-empty strings."
+    exit 1
+  fi
+}
 
 # --- T-5.2.1: Create secret prompt-gateway/{env}/api-keys (JSON array) ---
 if [ "$SKIP_SECRETS" = false ]; then
   echo "T-5.2.1: Create secret ${SSM_PREFIX}/api-keys (JSON array)..."
   if [ -z "${API_KEYS_JSON:-}" ]; then
-    if command -v bw >/dev/null 2>&1; then
-      BW_STATUS=$(bw status 2>/dev/null | jq -r '.status // empty')
-      if [ "$BW_STATUS" = "unlocked" ]; then
-        BW_ITEM_NAME="Prompt Gateway ${ENV} API keys"
-        # Reuse existing note if present (bw get notes requires item ID, not name)
-        BW_ITEM_ID=$(bw list items --search "$BW_ITEM_NAME" 2>/dev/null | jq -r --arg name "$BW_ITEM_NAME" '.[] | select(.name == $name) | .id' | head -1)
-        EXISTING_NOTES=""
-        [ -n "$BW_ITEM_ID" ] && EXISTING_NOTES=$(bw get notes "$BW_ITEM_ID" 2>/dev/null || true)
-        if [ -n "$EXISTING_NOTES" ] && echo "$EXISTING_NOTES" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
-          API_KEYS_JSON=$(echo "$EXISTING_NOTES" | jq -c '.')
-          echo "  OK: Using existing API key(s) from Bitwarden note \"$BW_ITEM_NAME\"."
-        else
-          echo "  Generating new API key and storing in Bitwarden..."
-          NEW_KEY=$(openssl rand -base64 32 | tr -d '\n')
-          API_KEYS_JSON=$(jq -n --arg k "$NEW_KEY" '[$k]' -c)
-          # Build secure-note JSON (type 2) with jq, then bw encode | bw create item
-          BW_JSON=$(jq -n -c --arg name "$BW_ITEM_NAME" --arg notes "$API_KEYS_JSON" '{type:2,name:$name,notes:$notes,passwordHistory:[],revisionDate:null,creationDate:null,deletedDate:null,organizationId:null,collectionIds:null,folderId:null,favorite:false,fields:[],login:null,secureNote:{type:0},card:null,identity:null,reprompt:0}')
-          BW_TMP=$(mktemp)
-          ( echo "$BW_JSON" | bw encode 2>/dev/null | bw create item > "$BW_TMP" 2>&1; echo $? >> "$BW_TMP.rc" ) &
-          BW_PID=$!
-          for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do kill -0 $BW_PID 2>/dev/null || break; sleep 1; done
-          if kill -0 $BW_PID 2>/dev/null; then
-            kill $BW_PID 2>/dev/null; wait $BW_PID 2>/dev/null
-            BW_OUT="Bitwarden create timed out after 20s. Run 'bw unlock' and try again, or set API_KEYS_JSON."
-            BW_RC=1
+    if [ "$IS_DEV" = true ]; then
+      if command -v bw >/dev/null 2>&1; then
+        BW_STATUS=$(bw status 2>/dev/null | jq -r '.status // empty')
+        if [ "$BW_STATUS" = "unlocked" ]; then
+          BW_ITEM_NAME="Prompt Gateway ${ENV} API keys"
+          # Reuse existing note if present (bw get notes requires item ID, not name)
+          BW_ITEM_ID=$(bw list items --search "$BW_ITEM_NAME" 2>/dev/null | jq -r --arg name "$BW_ITEM_NAME" '.[] | select(.name == $name) | .id' | head -1)
+          EXISTING_NOTES=""
+          [ -n "$BW_ITEM_ID" ] && EXISTING_NOTES=$(bw get notes "$BW_ITEM_ID" 2>/dev/null || true)
+          if [ -n "$EXISTING_NOTES" ] && echo "$EXISTING_NOTES" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+            API_KEYS_JSON=$(echo "$EXISTING_NOTES" | jq -c '.')
+            echo "  OK: Using existing API key(s) from Bitwarden note \"$BW_ITEM_NAME\"."
           else
-            wait $BW_PID
-            BW_RC=$(tail -1 "$BW_TMP.rc" 2>/dev/null)
-            BW_RC=${BW_RC:-1}
-            BW_OUT=$(cat "$BW_TMP" 2>/dev/null)
+            echo "  Generating new API key and storing in Bitwarden..."
+            NEW_KEY=$(openssl rand -base64 32 | tr -d '\n')
+            API_KEYS_JSON=$(jq -n --arg k "$NEW_KEY" '[$k]' -c)
+            # Build secure-note JSON (type 2) with jq, then bw encode | bw create item
+            BW_JSON=$(jq -n -c --arg name "$BW_ITEM_NAME" --arg notes "$API_KEYS_JSON" '{type:2,name:$name,notes:$notes,passwordHistory:[],revisionDate:null,creationDate:null,deletedDate:null,organizationId:null,collectionIds:null,folderId:null,favorite:false,fields:[],login:null,secureNote:{type:0},card:null,identity:null,reprompt:0}')
+            BW_TMP=$(mktemp)
+            ( echo "$BW_JSON" | bw encode 2>/dev/null | bw create item > "$BW_TMP" 2>&1; echo $? >> "$BW_TMP.rc" ) &
+            BW_PID=$!
+            for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do kill -0 $BW_PID 2>/dev/null || break; sleep 1; done
+            if kill -0 $BW_PID 2>/dev/null; then
+              kill $BW_PID 2>/dev/null; wait $BW_PID 2>/dev/null
+              BW_OUT="Bitwarden create timed out after 20s. Run 'bw unlock' and try again, or set API_KEYS_JSON."
+              BW_RC=1
+            else
+              wait $BW_PID
+              BW_RC=$(tail -1 "$BW_TMP.rc" 2>/dev/null)
+              BW_RC=${BW_RC:-1}
+              BW_OUT=$(cat "$BW_TMP" 2>/dev/null)
+            fi
+            rm -f "$BW_TMP" "$BW_TMP.rc"
+            if [ "${BW_RC:-1}" -eq 0 ] && echo "$BW_OUT" | jq -e '.id' >/dev/null 2>&1; then
+              echo "  OK: Created secure note \"$BW_ITEM_NAME\" in Bitwarden with the new key."
+            else
+              echo "  WARN: Bitwarden create failed; using key for AWS only (not stored in bw)."
+              [ -n "$BW_OUT" ] && echo "  bw error: $BW_OUT"
+            fi
           fi
-          rm -f "$BW_TMP" "$BW_TMP.rc"
-          if [ "${BW_RC:-1}" -eq 0 ] && echo "$BW_OUT" | jq -e '.id' >/dev/null 2>&1; then
-            echo "  OK: Created secure note \"$BW_ITEM_NAME\" in Bitwarden with the new key."
+        else
+          API_KEYS_JSON="$(existing_ssm_parameter "${SSM_PREFIX}/api-keys")"
+          if [ -n "$API_KEYS_JSON" ]; then
+            echo "  OK: Reusing existing SSM parameter ${SSM_PREFIX}/api-keys."
           else
-            echo "  WARN: Bitwarden create failed; using key for AWS only (not stored in bw)."
-            [ -n "$BW_OUT" ] && echo "  bw error: $BW_OUT"
+            API_KEYS_JSON="$PLACEHOLDER_API_KEYS"
+            echo "  NOTE: Bitwarden not unlocked (status=$BW_STATUS). Using placeholder. Run 'bw unlock' and re-run to generate and store keys in bw."
           fi
         fi
       else
-        API_KEYS_JSON='["change-me-dev-key"]'
-        echo "  NOTE: Bitwarden not unlocked (status=$BW_STATUS). Using placeholder. Run 'bw unlock' and re-run to generate and store keys in bw."
+        API_KEYS_JSON="$(existing_ssm_parameter "${SSM_PREFIX}/api-keys")"
+        if [ -n "$API_KEYS_JSON" ]; then
+          echo "  OK: Reusing existing SSM parameter ${SSM_PREFIX}/api-keys."
+        else
+          API_KEYS_JSON="$PLACEHOLDER_API_KEYS"
+          echo "  NOTE: API_KEYS_JSON not set and Bitwarden CLI (bw) not found. Using placeholder."
+        fi
       fi
     else
-      API_KEYS_JSON='["change-me-dev-key"]'
-      echo "  NOTE: API_KEYS_JSON not set and Bitwarden CLI (bw) not found. Using placeholder."
+      API_KEYS_JSON="$(existing_secret_string "prompt-gateway/${ENV}/api-keys")"
+      if [ -n "$API_KEYS_JSON" ]; then
+        echo "  OK: Reusing existing secret prompt-gateway/${ENV}/api-keys."
+      else
+        echo "  FAIL: API_KEYS_JSON is required for $ENV when no existing secret is present."
+        exit 1
+      fi
     fi
   fi
-  API_KEYS_JSON="${API_KEYS_JSON:-[\"change-me-dev-key\"]}"
-  OPENAI_KEY="${OPENAI_API_KEY:-sk-placeholder-replace-with-real-openai-key}"
+  API_KEYS_JSON="${API_KEYS_JSON:-$PLACEHOLDER_API_KEYS}"
 
-  if [ "$ENV" = "dev" ]; then
+  if [ -n "${OPENAI_API_KEY:-}" ]; then
+    OPENAI_KEY="$OPENAI_API_KEY"
+  elif [ "$IS_DEV" = true ]; then
+    OPENAI_KEY="$(existing_ssm_parameter "${SSM_PREFIX}/openai-api-key")"
+    if [ -n "$OPENAI_KEY" ]; then
+      echo "  OK: Reusing existing SSM parameter ${SSM_PREFIX}/openai-api-key."
+    else
+      OPENAI_KEY="$PLACEHOLDER_OPENAI_KEY"
+    fi
+  else
+    OPENAI_KEY="$(existing_secret_string "prompt-gateway/${ENV}/openai-api-key")"
+    if [ -n "$OPENAI_KEY" ]; then
+      echo "  OK: Reusing existing secret prompt-gateway/${ENV}/openai-api-key."
+    else
+      echo "  FAIL: OPENAI_API_KEY is required for $ENV when no existing secret is present."
+      exit 1
+    fi
+  fi
+
+  validate_api_keys_json "$API_KEYS_JSON"
+  if [ "$IS_DEV" = false ]; then
+    require_non_placeholder "API_KEYS_JSON" "$API_KEYS_JSON" "$PLACEHOLDER_API_KEYS"
+    require_non_placeholder "OPENAI_API_KEY" "$OPENAI_KEY" "$PLACEHOLDER_OPENAI_KEY"
+  fi
+
+  if [ "$IS_DEV" = true ]; then
     # Dev: use SSM Parameter Store (SecureString) to avoid Secrets Manager per-secret cost
     echo "  Using SSM Parameter Store for dev (no Secrets Manager cost)."
     aws ssm put-parameter --name "${SSM_PREFIX}/api-keys" --value "$API_KEYS_JSON" --type SecureString --overwrite --region "$REGION"
@@ -131,10 +217,10 @@ if [ "$SKIP_SECRETS" = false ]; then
     fi
   fi
 
-  if [ "$API_KEYS_JSON" = '["change-me-dev-key"]' ]; then
+  if [ "$API_KEYS_JSON" = "$PLACEHOLDER_API_KEYS" ]; then
     echo "  NOTE: Using placeholder API key. Set API_KEYS_JSON or update in AWS Console/SSM."
   fi
-  if [ "$OPENAI_KEY" = "sk-placeholder-replace-with-real-openai-key" ]; then
+  if [ "$OPENAI_KEY" = "$PLACEHOLDER_OPENAI_KEY" ]; then
     echo "  NOTE: Using placeholder OpenAI key. Set OPENAI_API_KEY or update in AWS Console/SSM."
   fi
   echo ""

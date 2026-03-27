@@ -75,12 +75,13 @@ echo "  OK: /ready -> 200"
 # Use curl without -f so we capture body and HTTP code on 4xx/5xx for diagnostics
 CURL_OPTS_NOFAIL=(-s)
 [ "${3:-}" = "--insecure" ] && CURL_OPTS_NOFAIL=(-sk)
+POST_BODY=$(jq -nc --arg inputRef "$INPUT_REF" '{taskType:"chat_completion",inputRef:$inputRef}')
 echo "  POST /jobs..."
 RESPONSE=$(curl -w "\n%{http_code}" "${CURL_OPTS_NOFAIL[@]}" \
   -X POST \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d "{\"taskType\":\"chat_completion\",\"inputRef\":\"$INPUT_REF\"}" \
+  -d "$POST_BODY" \
   "$BASE_URL/jobs")
 BODY=$(echo "$RESPONSE" | sed '$d')
 HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
@@ -120,7 +121,7 @@ if [ "$REQUIRES_RESUME" = "true" ]; then
   echo "  OK: POST /jobs/$JOB_ID/resume -> $RESUME_HTTP_CODE"
 fi
 
-# T-7.6: Poll GET /jobs/{job_id} until Completed or Failed (timeout 60s)
+# T-7.6: Poll GET /jobs/{job_id} until Completed or Failed (default timeout 90s)
 echo "  Polling GET /jobs/$JOB_ID..."
 TIMEOUT="${SMOKE_TIMEOUT_SECONDS:-90}"
 ELAPSED=0

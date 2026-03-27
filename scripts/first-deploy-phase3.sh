@@ -215,7 +215,7 @@ if [ "$DEPLOY_ECS_API_SERVICE" = "true" ]; then
     --region "$REGION" \
     --no-cli-pager --query 'service.serviceName' --output text
 else
-  echo "  Skipping ECS control-plane-api redeploy so the warm fallback edge stays on its current revision"
+  echo "  Skipping ECS control-plane-api redeploy because Lambda HTTP mode keeps the ECS API service off by default"
 fi
 
 if [ "$PROCESSING_MODE" = "ecs" ]; then
