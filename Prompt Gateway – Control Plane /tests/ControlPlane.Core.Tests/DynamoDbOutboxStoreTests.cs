@@ -54,7 +54,10 @@ public class DynamoDbOutboxStoreTests
         Assert.That(dequeued, Is.Not.Null);
         Assert.That(dequeued!.OutboxId, Is.EqualTo("outbox-2"));
         await dynamoDb.Received(1).QueryAsync(
-            Arg.Is<QueryRequest>(request => request.ExclusiveStartKey != null && request.ExclusiveStartKey.Count > 0),
+            Arg.Is<QueryRequest>(request =>
+                request.IndexName == "gsi1" &&
+                request.ExclusiveStartKey != null &&
+                request.ExclusiveStartKey.Count > 0),
             Arg.Any<CancellationToken>());
     }
 
@@ -117,6 +120,39 @@ public class DynamoDbOutboxStoreTests
         var store = new DynamoDbOutboxStore(dynamoDb, new DynamoDbOptions { TableName = "test-table" }, clock);
 
         dynamoDb.QueryAsync(Arg.Any<QueryRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(new QueryResponse
+                {
+                    Items = new List<Dictionary<string, AttributeValue>>(),
+                    LastEvaluatedKey = new Dictionary<string, AttributeValue>()
+                }),
+                Task.FromResult(new QueryResponse
+                {
+                    Items = new List<Dictionary<string, AttributeValue>>(),
+                    LastEvaluatedKey = new Dictionary<string, AttributeValue>()
+                }));
+
+        await store.TryDequeueAsync(CancellationToken.None);
+
+        var expectedCutoff = now.Subtract(TimeSpan.FromMinutes(1)).UtcDateTime.ToString("O");
+        await dynamoDb.Received(1).QueryAsync(
+            Arg.Is<QueryRequest>(request =>
+                request.IndexName == "gsi1" &&
+                request.ExpressionAttributeNames.ContainsKey("#gsiSk") &&
+                request.ExpressionAttributeValues.ContainsKey(":cutoff")
+                && request.ExpressionAttributeValues[":cutoff"].S == expectedCutoff),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task TryDequeueAsync_DoesNotIncludeUnusedSortKeyName_WhenQueryingPendingPartition()
+    {
+        var dynamoDb = Substitute.For<IAmazonDynamoDB>();
+        var clock = Substitute.For<IClock>();
+        clock.UtcNow.Returns(new DateTimeOffset(2026, 3, 7, 0, 0, 0, TimeSpan.Zero));
+        var store = new DynamoDbOutboxStore(dynamoDb, new DynamoDbOptions { TableName = "test-table" }, clock);
+
+        dynamoDb.QueryAsync(Arg.Any<QueryRequest>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new QueryResponse
             {
                 Items = new List<Dictionary<string, AttributeValue>>(),
@@ -125,11 +161,57 @@ public class DynamoDbOutboxStoreTests
 
         await store.TryDequeueAsync(CancellationToken.None);
 
-        var expectedCutoff = now.Subtract(TimeSpan.FromMinutes(1)).UtcDateTime.ToString("O");
         await dynamoDb.Received(1).QueryAsync(
             Arg.Is<QueryRequest>(request =>
-                request.ExpressionAttributeValues.ContainsKey(":cutoff")
-                && request.ExpressionAttributeValues[":cutoff"].S == expectedCutoff),
+                request.IndexName == "gsi1" &&
+                request.ExpressionAttributeValues.ContainsKey(":gsiPk") &&
+                request.ExpressionAttributeValues[":gsiPk"].S == "OUTBOX_READY" &&
+                !request.ExpressionAttributeNames.ContainsKey("#gsiSk")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task TryDequeueAsync_QueriesExpiredProcessingPartition_WhenPendingQueueIsEmpty()
+    {
+        var dynamoDb = Substitute.For<IAmazonDynamoDB>();
+        var now = new DateTimeOffset(2026, 3, 7, 12, 0, 0, TimeSpan.Zero);
+        var clock = Substitute.For<IClock>();
+        clock.UtcNow.Returns(now);
+        var store = new DynamoDbOutboxStore(dynamoDb, new DynamoDbOptions { TableName = "test-table" }, clock);
+
+        var message = BuildOutboxMessage("outbox-expired");
+        dynamoDb.QueryAsync(Arg.Any<QueryRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(new QueryResponse
+                {
+                    Items = new List<Dictionary<string, AttributeValue>>(),
+                    LastEvaluatedKey = new Dictionary<string, AttributeValue>()
+                }),
+                Task.FromResult(new QueryResponse
+                {
+                    Items = new List<Dictionary<string, AttributeValue>>
+                    {
+                        new()
+                        {
+                            ["pk"] = new() { S = "OUTBOX" },
+                            ["sk"] = new() { S = message.OutboxId },
+                            ["message_json"] = new() { S = SerializeOutboxMessage(message) }
+                        }
+                    },
+                    LastEvaluatedKey = new Dictionary<string, AttributeValue>()
+                }));
+
+        dynamoDb.UpdateItemAsync(Arg.Any<UpdateItemRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new UpdateItemResponse()));
+
+        var dequeued = await store.TryDequeueAsync(CancellationToken.None);
+
+        Assert.That(dequeued, Is.Not.Null);
+        await dynamoDb.Received(1).QueryAsync(
+            Arg.Is<QueryRequest>(request =>
+                request.IndexName == "gsi1" &&
+                request.ExpressionAttributeValues.ContainsKey(":gsiPk") &&
+                request.ExpressionAttributeValues[":gsiPk"].S == "OUTBOX_PROCESSING"),
             Arg.Any<CancellationToken>());
     }
 

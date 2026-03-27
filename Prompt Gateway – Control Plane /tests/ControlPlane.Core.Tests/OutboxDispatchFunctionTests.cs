@@ -40,4 +40,23 @@ public class OutboxDispatchFunctionTests
 
         Assert.ThrowsAsync<InvalidOperationException>(() => function.FunctionHandlerAsync(CancellationToken.None));
     }
+
+    [Test]
+    public async Task FunctionHandlerAsync_ReturnsReachedLimitWhenBatchHitsInvocationCap()
+    {
+        var batchProcessor = Substitute.For<IOutboxDispatchBatchProcessor>();
+        var logger = Substitute.For<ILogger<OutboxDispatchFunction>>();
+        batchProcessor.ProcessAsync(10, Arg.Any<CancellationToken>())
+            .Returns(new OutboxDispatchBatchResult(10, reachedLimit: true));
+
+        var function = new OutboxDispatchFunction(
+            batchProcessor,
+            logger,
+            new OutboxLambdaOptions { MaxMessagesPerInvocation = 10 });
+
+        var result = await function.FunctionHandlerAsync(CancellationToken.None);
+
+        Assert.That(result.ProcessedCount, Is.EqualTo(10));
+        Assert.That(result.ReachedLimit, Is.True);
+    }
 }

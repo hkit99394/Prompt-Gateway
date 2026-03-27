@@ -15,7 +15,7 @@ Suggested ownership follows the project-local agent roster in `.agents/README.md
 | 0 | Normalize composition and deployment inputs | Complete: shared runtime composition roots are in place and ECS deployments use immutable image tags |
 | 1 | Fix intake semantics | Complete: `POST /jobs` now has a durable acceptance boundary with idempotent replay and resumable post-accept processing |
 | 2 | Harden provider execution | Reduce unnecessary retries and cost |
-| 3 | Strengthen async event processing | Improve outbox scalability and behavioral consistency |
+| 3 | Strengthen async event processing | Complete: outbox dequeue now uses indexed discovery and ECS/Lambda queue processing share the same unit-of-work contracts |
 | 4 | Improve observability and rollout confidence | Detect migration issues earlier |
 | 5 | Complete migration decisions and cleanup | Retire temporary paths safely |
 
@@ -343,6 +343,7 @@ Runtime knobs for concurrency, visibility timeout, OpenAI retry limits, and Lamb
 
 ### PG-301 Outbox dequeue redesign for scale
 
+- Status: Complete
 - Primary owner: `async-event-processing`
 - Priority: High
 - Dependencies: PG-001
@@ -369,8 +370,15 @@ The current outbox dequeue path depends on filtered queries over a shared partit
 - Work claiming remains safe under concurrency.
 - Existing delivery guarantees are preserved.
 
+**Completion notes**
+
+- Outbox dequeue now uses the existing DynamoDB GSI to discover `OUTBOX_READY` and expired `OUTBOX_PROCESSING` work instead of filtering a shared `OUTBOX` partition.
+- Outbox state transitions keep the GSI keys in sync across enqueue, claim, release, dispatch, and failure paths.
+- Lease-recovery and indexed-query behavior are covered in `DynamoDbOutboxStoreTests`.
+
 ### PG-302 ECS and Lambda queue-processing parity
 
+- Status: Complete
 - Primary owner: `async-event-processing`
 - Priority: Medium-High
 - Dependencies: PG-001, PG-002
@@ -399,8 +407,15 @@ Queue work is already mostly shared, but ECS loops and Lambda handlers still cre
 - Runtime-specific code only handles polling, batching, and trigger integration.
 - No behavioral drift in duplicate or retry handling.
 
+**Completion notes**
+
+- The ECS outbox worker now uses `IOutboxDispatchBatchProcessor`, the same batch unit-of-work contract used by the outbox Lambda.
+- Result queue and provider dispatch paths already share processor contracts, with ECS loops and Lambda handlers only handling polling or batch-failure integration.
+- Async worker coverage now verifies the ECS outbox worker honors the configured batch limit.
+
 ### PG-303 Async processing tests for backlog and lease behavior
 
+- Status: Complete
 - Primary owner: `async-event-processing`
 - Priority: Medium
 - Dependencies: PG-301, PG-302
@@ -422,6 +437,12 @@ Queue work is already mostly shared, but ECS loops and Lambda handlers still cre
   - partial batch failure behavior
   - duplicate in-progress handling
   - batch limit behavior
+
+**Completion notes**
+
+- `DynamoDbOutboxStoreTests` cover lease-expiry recovery and indexed dequeue behavior.
+- `OutboxDispatchFunctionTests`, `ResultQueueFunctionTests`, and `ProviderDispatchFunctionTests` cover batch-limit and partial-batch-failure semantics across Lambda handlers.
+- Provider duplicate-in-progress handling remains covered through the shared processor and worker tests.
 
 ---
 

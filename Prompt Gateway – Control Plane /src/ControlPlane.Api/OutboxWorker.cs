@@ -6,16 +6,16 @@ namespace ControlPlane.Api;
 
 public sealed class OutboxWorker : BackgroundService
 {
-    private readonly DispatchOutboxProcessor _processor;
+    private readonly IOutboxDispatchBatchProcessor _batchProcessor;
     private readonly ILogger<OutboxWorker> _logger;
     private readonly OutboxWorkerOptions _options;
 
     public OutboxWorker(
-        DispatchOutboxProcessor processor,
+        IOutboxDispatchBatchProcessor batchProcessor,
         ILogger<OutboxWorker> logger,
         OutboxWorkerOptions options)
     {
-        _processor = processor;
+        _batchProcessor = batchProcessor;
         _logger = logger;
         _options = options;
     }
@@ -26,8 +26,8 @@ public sealed class OutboxWorker : BackgroundService
         {
             try
             {
-                var processed = await _processor.ProcessOnceAsync(stoppingToken);
-                if (!processed)
+                var result = await _batchProcessor.ProcessAsync(_options.MaxMessagesPerCycle, stoppingToken);
+                if (result.ProcessedCount == 0)
                 {
                     await Task.Delay(_options.IdleDelay, stoppingToken);
                 }

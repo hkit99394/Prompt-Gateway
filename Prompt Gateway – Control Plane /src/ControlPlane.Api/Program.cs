@@ -26,6 +26,9 @@ builder.Services.AddControlPlaneRuntime(builder.Configuration);
 
 var outboxOptions = new OutboxWorkerOptions
 {
+    MaxMessagesPerCycle = int.TryParse(builder.Configuration["Outbox:MaxMessagesPerCycle"], out var outboxMaxMessages)
+        ? outboxMaxMessages
+        : 25,
     IdleDelay = TimeSpan.FromSeconds(
         double.TryParse(builder.Configuration["Outbox:IdleDelaySeconds"], out var idleDelay) ? idleDelay : 1),
     ErrorDelay = TimeSpan.FromSeconds(
