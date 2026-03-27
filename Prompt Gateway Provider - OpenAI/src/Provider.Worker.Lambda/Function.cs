@@ -2,11 +2,11 @@ using Amazon.Lambda.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Provider.Worker;
 using Provider.Worker.Aws;
-using Provider.Worker.Options;
 using Provider.Worker.Services;
+using Microsoft.Extensions.Options;
+using Provider.Worker.Options;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
 
@@ -103,14 +103,7 @@ public sealed class ProviderDispatchFunction
             .GetAwaiter()
             .GetResult();
 
-        builder.Services.AddOptions<ProviderWorkerOptions>()
-            .Bind(builder.Configuration.GetSection(ProviderWorkerOptions.SectionName))
-            .ValidateDataAnnotations()
-            .Validate(options => options.TryValidate(out _), "Invalid ProviderWorker configuration.")
-            .ValidateOnStart();
-
-        builder.Services.AddProviderWorkerAws();
-        builder.Services.AddProviderWorkerCore();
+        builder.Services.AddProviderWorkerRuntime(builder.Configuration);
 
         return builder.Build();
     }

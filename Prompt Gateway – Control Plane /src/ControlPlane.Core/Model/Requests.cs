@@ -44,6 +44,73 @@ public sealed class CanonicalJobRequest
             Metadata = Metadata is null ? null : new Dictionary<string, string>(Metadata)
         };
     }
+
+    public CanonicalJobRequest WithJobId(string jobId)
+    {
+        return new CanonicalJobRequest
+        {
+            JobId = jobId,
+            AttemptId = AttemptId,
+            TraceId = TraceId,
+            TaskType = TaskType,
+            InputRef = InputRef,
+            PromptKey = PromptKey,
+            PromptBucket = PromptBucket,
+            PromptS3Key = PromptS3Key,
+            PromptS3Bucket = PromptS3Bucket,
+            SystemPrompt = SystemPrompt,
+            Model = Model,
+            PromptInput = PromptInput,
+            PromptVariables = PromptVariables is null ? null : new Dictionary<string, string>(PromptVariables),
+            Metadata = Metadata is null ? null : new Dictionary<string, string>(Metadata)
+        };
+    }
+
+    public bool IsEquivalentIntake(CanonicalJobRequest? other)
+    {
+        if (other is null)
+        {
+            return false;
+        }
+
+        return string.Equals(TaskType, other.TaskType, StringComparison.Ordinal)
+               && string.Equals(InputRef, other.InputRef, StringComparison.Ordinal)
+               && string.Equals(PromptKey, other.PromptKey, StringComparison.Ordinal)
+               && string.Equals(PromptBucket, other.PromptBucket, StringComparison.Ordinal)
+               && string.Equals(PromptS3Key, other.PromptS3Key, StringComparison.Ordinal)
+               && string.Equals(PromptS3Bucket, other.PromptS3Bucket, StringComparison.Ordinal)
+               && string.Equals(SystemPrompt, other.SystemPrompt, StringComparison.Ordinal)
+               && string.Equals(Model, other.Model, StringComparison.Ordinal)
+               && string.Equals(PromptInput, other.PromptInput, StringComparison.Ordinal)
+               && DictionaryEquals(PromptVariables, other.PromptVariables)
+               && DictionaryEquals(Metadata, other.Metadata);
+    }
+
+    private static bool DictionaryEquals(
+        IReadOnlyDictionary<string, string>? left,
+        IReadOnlyDictionary<string, string>? right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left is null || right is null || left.Count != right.Count)
+        {
+            return false;
+        }
+
+        foreach (var pair in left)
+        {
+            if (!right.TryGetValue(pair.Key, out var value)
+                || !string.Equals(pair.Value, value, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 public sealed record JobHandle(string JobId, string AttemptId, string TraceId);

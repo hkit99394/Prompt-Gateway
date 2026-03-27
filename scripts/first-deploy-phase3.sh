@@ -17,7 +17,7 @@
 #
 # Optional env vars:
 #   - ENV: dev (default), staging, or prod
-#   - IMAGE_TAG: tag for pushed images (default: latest)
+#   - IMAGE_TAG: immutable tag for pushed images (default: current git SHA, or UTC timestamp fallback)
 #   - AWS_REGION: default us-east-1
 #   - PROCESSING_MODE: ecs (default) or lambda
 #
@@ -29,10 +29,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV="${ENV:-dev}"
 REGION="${AWS_REGION:-us-east-1}"
-IMAGE_TAG="${IMAGE_TAG:-latest}"
 PROCESSING_MODE="${PROCESSING_MODE:-ecs}"
 BUILD_ONLY=false
 SKIP_VERIFY=false
+DEFAULT_IMAGE_TAG="$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD 2>/dev/null || date -u +%Y%m%d%H%M%S)"
+IMAGE_TAG="${IMAGE_TAG:-$DEFAULT_IMAGE_TAG}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -107,11 +108,9 @@ echo ""
 echo "T-5.3.1: Build and push Control Plane API image to ECR"
 docker build --platform linux/amd64 \
   -t "$ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG" \
-  -t "$ECR_REGISTRY/$ECR_REPO_API:latest" \
   -f "./${CONTROL_PLANE_CONTEXT}/ControlPlane.Api/Dockerfile" \
   "./${CONTROL_PLANE_CONTEXT}"
 docker push "$ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG"
-docker push "$ECR_REGISTRY/$ECR_REPO_API:latest"
 echo "  OK: $ECR_REPO_API pushed"
 
 if [ "$PROCESSING_MODE" = "ecs" ]; then
@@ -119,11 +118,9 @@ if [ "$PROCESSING_MODE" = "ecs" ]; then
   echo "T-5.3.2: Build and push Provider Worker image"
   docker build --platform linux/amd64 \
     -t "$ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG" \
-    -t "$ECR_REGISTRY/$ECR_REPO_WORKER:latest" \
     -f "./${WORKER_CONTEXT}/Provider.Worker.Host/Dockerfile" \
     "./${WORKER_CONTEXT}"
   docker push "$ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG"
-  docker push "$ECR_REGISTRY/$ECR_REPO_WORKER:latest"
   echo "  OK: $ECR_REPO_WORKER pushed"
 else
   echo ""

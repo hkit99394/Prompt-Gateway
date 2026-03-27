@@ -12,8 +12,8 @@ Suggested ownership follows the project-local agent roster in `.agents/README.md
 
 | Phase | Goal | Outcome |
 |------|------|---------|
-| 0 | Normalize composition and deployment inputs | Reduce drift between ECS and Lambda hosts |
-| 1 | Fix intake semantics | Make job submission safe and retryable |
+| 0 | Normalize composition and deployment inputs | Complete: shared runtime composition roots are in place and ECS deployments use immutable image tags |
+| 1 | Fix intake semantics | Complete: `POST /jobs` now has a durable acceptance boundary with idempotent replay and resumable post-accept processing |
 | 2 | Harden provider execution | Reduce unnecessary retries and cost |
 | 3 | Strengthen async event processing | Improve outbox scalability and behavioral consistency |
 | 4 | Improve observability and rollout confidence | Detect migration issues earlier |
@@ -25,6 +25,7 @@ Suggested ownership follows the project-local agent roster in `.agents/README.md
 
 ### PG-001 Shared control-plane composition root
 
+- Status: Complete
 - Primary owner: `runtime-extraction`
 - Sidecar: `release-verification`
 - Priority: High
@@ -57,8 +58,15 @@ Control Plane API and result-processing Lambda bootstrap the same routing, retry
 - Host files become thin shells.
 - All existing Control Plane tests still pass.
 
+**Completion notes**
+
+- Shared runtime registration now lives in `ControlPlaneRuntimeServiceCollectionExtensions`.
+- API, outbox Lambda, and result Lambda bootstrap through the same control-plane registration path.
+- Control Plane test suite passes.
+
 ### PG-002 Shared provider composition root
 
+- Status: Complete
 - Primary owner: `runtime-extraction`
 - Priority: High
 - Dependencies: None
@@ -84,8 +92,15 @@ The ECS host and Lambda host for provider execution share most of the same servi
 - Lambda-specific secret hydration remains isolated to Lambda bootstrap.
 - All existing provider tests still pass.
 
+**Completion notes**
+
+- Shared provider runtime registration now lives in `ProviderWorkerRuntimeServiceCollectionExtensions`.
+- ECS host and Lambda host use the same provider registration path, while Lambda secret hydration stays in the Lambda bootstrap.
+- Provider test suite passes.
+
 ### PG-003 Immutable deployment artifacts
 
+- Status: Complete
 - Primary owner: `lambda-platform`
 - Sidecar: `release-verification`
 - Priority: High
@@ -112,12 +127,19 @@ ECS services currently point at mutable `:latest` images, which weakens reproduc
 - Rollback can be performed by selecting a known prior artifact.
 - Deployment documentation matches the new artifact strategy.
 
+**Completion notes**
+
+- ECS task definitions now consume explicit `api_image_tag` and `worker_image_tag` inputs instead of `:latest`.
+- Deploy script defaults to an immutable git-SHA-based tag.
+- Deployment documentation and smoke/deploy flow were updated to match the immutable artifact strategy.
+
 ---
 
 ## Phase 1 – Intake Semantics
 
 ### PG-101 Intake idempotency contract
 
+- Status: Complete
 - Primary owner: `control-plane-core`
 - Priority: High
 - Dependencies: PG-001
@@ -144,8 +166,15 @@ Clients can hit ambiguous outcomes when `POST /jobs` partially succeeds and is r
 - The API returns the original durable handle for equivalent retries.
 - Error responses clearly distinguish malformed input from duplicate/idempotent replay.
 
+**Completion notes**
+
+- `POST /jobs` supports `X-Idempotency-Key` and derives a stable job identity for equivalent retries.
+- Equivalent retries return the original accepted handle, while conflicting payload reuse returns `409`.
+- Intake comparison helpers were added to the canonical request model.
+
 ### PG-102 Durable acceptance boundary for `POST /jobs`
 
+- Status: Complete
 - Primary owner: `control-plane-core`
 - Sidecar: `release-verification`
 - Priority: High
@@ -173,8 +202,15 @@ Clients can hit ambiguous outcomes when `POST /jobs` partially succeeds and is r
 - Failures after acceptance do not require the client to guess whether the job exists.
 - Retry and resume behavior is documented and tested.
 
+**Completion notes**
+
+- `POST /jobs` now returns after durable acceptance and no longer performs route/dispatch inline in the request path.
+- Post-accept continuation is handled asynchronously by a dedicated resume worker, with manual `/jobs/{jobId}/resume` as the fallback path.
+- API docs and smoke-test flow were updated for the `202 Accepted` contract and resume handling.
+
 ### PG-103 Intake and partial-failure test coverage
 
+- Status: Complete
 - Primary owner: `control-plane-core`
 - Priority: High
 - Dependencies: PG-101, PG-102
@@ -196,6 +232,11 @@ Clients can hit ambiguous outcomes when `POST /jobs` partially succeeds and is r
   - accept succeeds but route fails
   - accept succeeds but dispatch fails
   - safe retry behavior after ambiguous client-side failure
+
+**Completion notes**
+
+- Control Plane API tests now cover duplicate intake, replay behavior, durable acceptance, no inline route/dispatch, and resume handling.
+- Core orchestrator resume tests remain in place for created and terminal-state jobs.
 
 ---
 

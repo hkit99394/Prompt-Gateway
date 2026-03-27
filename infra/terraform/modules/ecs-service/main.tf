@@ -7,8 +7,8 @@ data "aws_region" "current" {}
 locals {
   account_id            = data.aws_caller_identity.current.account_id
   region                = data.aws_region.current.name
-  api_image             = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/prompt-gateway-${var.environment}-control-plane-api:latest"
-  worker_image          = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/prompt-gateway-${var.environment}-provider-worker:latest"
+  api_image             = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/prompt-gateway-${var.environment}-control-plane-api:${var.api_image_tag}"
+  worker_image          = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/prompt-gateway-${var.environment}-provider-worker:${var.worker_image_tag}"
   api_keys_secret_arn   = "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:prompt-gateway/${var.environment}/api-keys"
   openai_key_secret_arn = "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:prompt-gateway/${var.environment}/openai-api-key"
   # Dev uses SSM Parameter Store (no Secrets Manager cost); staging/prod use Secrets Manager

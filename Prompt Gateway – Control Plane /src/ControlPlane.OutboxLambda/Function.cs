@@ -64,30 +64,6 @@ public sealed class OutboxDispatchFunction
     {
         var builder = Host.CreateApplicationBuilder();
 
-        var awsQueueOptions = new AwsQueueOptions
-        {
-            DispatchQueueUrl = builder.Configuration["AwsQueue:DispatchQueueUrl"] ?? string.Empty,
-            ResultQueueUrl = builder.Configuration["AwsQueue:ResultQueueUrl"] ?? string.Empty
-        };
-
-        var dynamoOptions = new DynamoDbOptions
-        {
-            TableName = builder.Configuration["AwsStorage:TableName"] ?? string.Empty,
-            JobListIndexName = builder.Configuration["AwsStorage:JobListIndexName"] ?? "gsi1",
-            DeduplicationTtlDays = int.TryParse(builder.Configuration["AwsStorage:DeduplicationTtlDays"], out var dedupeTtlDays)
-                ? dedupeTtlDays
-                : 7,
-            OutboxTerminalTtlDays = int.TryParse(builder.Configuration["AwsStorage:OutboxTerminalTtlDays"], out var outboxTtlDays)
-                ? outboxTtlDays
-                : 7,
-            EventTtlDays = int.TryParse(builder.Configuration["AwsStorage:EventTtlDays"], out var eventTtlDays)
-                ? eventTtlDays
-                : 30,
-            ResultTtlDays = int.TryParse(builder.Configuration["AwsStorage:ResultTtlDays"], out var resultTtlDays)
-                ? resultTtlDays
-                : 30
-        };
-
         var options = new OutboxLambdaOptions
         {
             MaxMessagesPerInvocation = int.TryParse(
@@ -98,9 +74,7 @@ public sealed class OutboxDispatchFunction
         };
 
         builder.Services.AddSingleton(options);
-        builder.Services.AddControlPlaneAws(awsQueueOptions, dynamoOptions);
-        builder.Services.AddSingleton<DispatchOutboxProcessor>();
-        builder.Services.AddSingleton<IOutboxDispatchBatchProcessor, OutboxDispatchBatchProcessor>();
+        builder.Services.AddControlPlaneRuntime(builder.Configuration);
 
         return builder.Build();
     }

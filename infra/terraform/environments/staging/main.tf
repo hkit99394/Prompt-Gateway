@@ -91,6 +91,8 @@ module "ecs_service" {
   result_queue_url                       = module.sqs.result_queue_url
   prompts_bucket_name                    = module.s3.prompts_bucket_name
   results_bucket_name                    = module.s3.results_bucket_name
+  api_image_tag                          = var.api_image_tag
+  worker_image_tag                       = var.worker_image_tag
   api_desired_count                      = 2
   worker_desired_count                   = 2
   disable_api_hosted_workers             = var.enable_lambda_processing

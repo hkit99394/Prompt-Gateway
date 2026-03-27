@@ -190,7 +190,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | 2 | T-4.3.2 | Configure AWS credentials (OIDC or stored credentials) |
 | 3 | T-4.3.3 | Login to ECR: `aws ecr get-login-password` |
 | 4 | T-4.3.4 | Build Control Plane API Docker image |
-| 5 | T-4.3.5 | Tag image: `$ECR_URL/control-plane-api:$GIT_SHA` and `latest` |
+| 5 | T-4.3.5 | Tag image with an immutable build tag, e.g. `$ECR_URL/control-plane-api:$GIT_SHA` |
 | 6 | T-4.3.6 | Push Control Plane image to ECR |
 | 7 | T-4.3.7 | Build Provider Worker Docker image |
 | 8 | T-4.3.8 | Tag and push Provider Worker image |
@@ -243,7 +243,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 | 3.5 | T-5.3.5 | Deploy Provider Worker service |
 | 3.6 | T-5.3.6 | Verify tasks are running (ECS console or CLI) |
 
-**Automation:** Run `./scripts/first-deploy-phase3.sh --processing-mode ecs|lambda` to execute Phase 3 for the selected runtime. `ecs` keeps queue processing on ECS and turns Lambda processing off. `lambda` packages and enables Lambda processing while scaling ECS queue workers down. Requires Phase 1 and Phase 2 complete, Docker and `jq` installed. Optional env vars: `ENV` (dev | staging | prod), `IMAGE_TAG` (default: latest), `AWS_REGION` (default: us-east-1). Use `--build-only` to only build and push images without deploying; use `--skip-verify` to skip the final runtime verification.
+**Automation:** Run `./scripts/first-deploy-phase3.sh --processing-mode ecs|lambda` to execute Phase 3 for the selected runtime. `ecs` keeps queue processing on ECS and turns Lambda processing off. `lambda` packages and enables Lambda processing while scaling ECS queue workers down. Requires Phase 1 and Phase 2 complete, Docker and `jq` installed. Optional env vars: `ENV` (dev | staging | prod), `IMAGE_TAG` (default: current git SHA, or UTC timestamp fallback), `AWS_REGION` (default: us-east-1). Use `--build-only` to only build and push images without deploying; use `--skip-verify` to skip the final runtime verification. Terraform ECS task definitions now take explicit `api_image_tag` and `worker_image_tag` inputs and default to a `bootstrap` placeholder until a real build tag is promoted.
 
 ### Phase 4: Smoke tests
 
@@ -251,7 +251,7 @@ This document describes the target architecture, infrastructure-as-code layout, 
 |------|------|--------------|
 | 4.1 | T-5.4.1 | `curl https://<alb>/health` → 200 |
 | 4.2 | T-5.4.2 | `curl https://<alb>/ready` → 200 (DynamoDB, SQS reachable) |
-| 4.3 | T-5.4.3 | `POST /jobs` with valid payload + `X-API-Key` → 201, job_id returned |
+| 4.3 | T-5.4.3 | `POST /jobs` with valid payload + `X-API-Key` → 202 accepted (or legacy 200/201), job_id returned |
 | 4.4 | T-5.4.4 | `GET /jobs/{job_id}` → job status |
 | 4.5 | T-5.4.5 | Wait for job completion, `GET /jobs/{job_id}/result` → 200 |
 
@@ -312,7 +312,7 @@ For Lambda-mode promotion while keeping ECS mode as a fallback, use `./scripts/p
 | T-7.2 | Accept args: `BASE_URL`, `API_KEY` |
 | T-7.3 | Call `GET /health`, exit 1 if not 200 |
 | T-7.4 | Call `GET /ready`, exit 1 if not 200 |
-| T-7.5 | Call `POST /jobs` with minimal valid payload, capture `job_id` |
+| T-7.5 | Call `POST /jobs` with minimal valid payload, capture `job_id` and resume if the response indicates follow-up dispatch is required |
 | T-7.6 | Poll `GET /jobs/{job_id}` until status is `Completed` or `Failed` (timeout 60s) |
 | T-7.7 | If Completed: `GET /jobs/{job_id}/result`, assert 200 |
 | T-7.8 | If Failed: log and exit 1 |

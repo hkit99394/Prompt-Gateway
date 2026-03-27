@@ -13,6 +13,7 @@
   - `AwsStorage__EventTtlDays` (defaults to `30`)
   - `AwsStorage__ResultTtlDays` (defaults to `30`)
 - Hosted background workers default to enabled:
+  - `HostedWorkers__EnablePostAcceptResumeWorker` (defaults to `true`)
   - `HostedWorkers__EnableOutboxWorker` (defaults to `true`)
   - `HostedWorkers__EnableResultQueueWorker` (defaults to `true`)
 - Do not store production keys in `appsettings.json`.
@@ -28,6 +29,11 @@
 ## Request contract
 
 - Header: `X-API-Key`
+- Optional header: `X-Idempotency-Key`
+  - When supplied, the API derives a stable job identity so retried `POST /jobs` calls can safely replay the accepted job.
+- `POST /jobs` returns once the job is durably accepted.
+  - Follow-up routing and dispatch continue asynchronously when the post-accept worker is enabled.
+  - If the response includes `requiresResume=true`, call `POST /jobs/{jobId}/resume` to continue processing manually.
 - `POST /jobs` for `taskType=chat_completion` requires at least one prompt reference field:
   - `inputRef` (legacy-compatible, mapped to worker prompt key)
   - `promptKey`
@@ -65,10 +71,11 @@ curl -i \
 
 ## Expected response codes
 
-- `200`: request accepted or read operation succeeded
+- `202`: job intake accepted
+- `200`: read operation succeeded
 - `400`: invalid request payload (for example missing `taskType` or prompt reference for `chat_completion`)
 - `401`: missing/invalid `X-API-Key`
-- `409`: orchestration state conflict (for example concurrent update conflict)
+- `409`: orchestration state conflict or idempotency key/job ID reused for a different request
 
 ## Troubleshooting
 
@@ -82,5 +89,6 @@ curl -i \
 - Unexpected `409`:
   - Retry the request after reloading current job state.
 - ECS API should stop polling queues after Lambda cutover:
+  - Set `HostedWorkers__EnablePostAcceptResumeWorker=false` if you want all post-accept continuation to be manual during debugging.
   - Set `HostedWorkers__EnableOutboxWorker=false`.
   - Set `HostedWorkers__EnableResultQueueWorker=false`.

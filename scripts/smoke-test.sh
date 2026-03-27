@@ -69,9 +69,9 @@ RESPONSE=$(curl -w "\n%{http_code}" "${CURL_OPTS_NOFAIL[@]}" \
 BODY=$(echo "$RESPONSE" | sed '$d')
 HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
 
-# Accept 200 (Ok) or 201 (Created) per REST conventions for resource creation
-if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
-  echo "  FAIL: POST /jobs returned $HTTP_CODE (expected 200 or 201)"
+# Accept legacy 200/201 and new durable-acceptance 202
+if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "202" ]; then
+  echo "  FAIL: POST /jobs returned $HTTP_CODE (expected 200, 201, or 202)"
   echo "  Response: $BODY"
   exit 1
 fi
@@ -83,6 +83,25 @@ if [ -z "$JOB_ID" ]; then
   exit 1
 fi
 echo "  OK: POST /jobs -> $HTTP_CODE, jobId=$JOB_ID"
+
+REQUIRES_RESUME=$(echo "$BODY" | jq -r '.requiresResume // .RequiresResume // false' 2>/dev/null || echo "false")
+if [ "$REQUIRES_RESUME" = "true" ]; then
+  echo "  Job requires resume. POST /jobs/$JOB_ID/resume..."
+  RESUME_RESPONSE=$(curl -w "\n%{http_code}" "${CURL_OPTS_NOFAIL[@]}" \
+    -X POST \
+    -H "X-API-Key: $API_KEY" \
+    "$BASE_URL/jobs/$JOB_ID/resume")
+  RESUME_BODY=$(echo "$RESUME_RESPONSE" | sed '$d')
+  RESUME_HTTP_CODE=$(echo "$RESUME_RESPONSE" | tail -n 1)
+
+  if [ "$RESUME_HTTP_CODE" != "200" ] && [ "$RESUME_HTTP_CODE" != "202" ]; then
+    echo "  FAIL: POST /jobs/$JOB_ID/resume returned $RESUME_HTTP_CODE (expected 200 or 202)"
+    echo "  Response: $RESUME_BODY"
+    exit 1
+  fi
+
+  echo "  OK: POST /jobs/$JOB_ID/resume -> $RESUME_HTTP_CODE"
+fi
 
 # T-7.6: Poll GET /jobs/{job_id} until Completed or Failed (timeout 60s)
 echo "  Polling GET /jobs/$JOB_ID..."

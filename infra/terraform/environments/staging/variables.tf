@@ -12,6 +12,18 @@ variable "environment" {
   default     = "staging"
 }
 
+variable "api_image_tag" {
+  description = "Immutable image tag for the Control Plane API ECS task definition"
+  type        = string
+  default     = "bootstrap"
+}
+
+variable "worker_image_tag" {
+  description = "Immutable image tag for the Provider Worker ECS task definition"
+  type        = string
+  default     = "bootstrap"
+}
+
 variable "certificate_arn" {
   description = "ACM certificate ARN for HTTPS (required for staging)"
   type        = string

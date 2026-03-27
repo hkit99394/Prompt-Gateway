@@ -93,6 +93,18 @@ variable "results_bucket_name" {
   default     = ""
 }
 
+variable "api_image_tag" {
+  description = "Immutable image tag for the Control Plane API container"
+  type        = string
+  default     = "bootstrap"
+}
+
+variable "worker_image_tag" {
+  description = "Immutable image tag for the Provider Worker container"
+  type        = string
+  default     = "bootstrap"
+}
+
 variable "api_desired_count" {
   description = "Desired count for Control Plane API service"
   type        = number
