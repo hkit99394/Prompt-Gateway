@@ -326,6 +326,17 @@ public class ApiSecurityTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 
+    [Test]
+    public async Task SwaggerJsonEndpoint_WhenDisabled_ReturnsNotFound()
+    {
+        await using var factory = new ControlPlaneApiFactory(enableSwagger: false);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/swagger/v1/swagger.json");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
     private sealed class ControlPlaneApiFactory : WebApplicationFactory<Program>
     {
         public const string ValidApiKey = "test-api-key";
@@ -335,11 +346,13 @@ public class ApiSecurityTests
         public IOutboxStore OutboxStore { get; } = Substitute.For<IOutboxStore>();
         public IAmazonDynamoDB DynamoDb { get; } = Substitute.For<IAmazonDynamoDB>();
         public IAmazonSQS Sqs { get; } = Substitute.For<IAmazonSQS>();
+        private readonly bool _enableSwagger;
         private readonly Dictionary<string, JobRecord> _jobs = new(StringComparer.Ordinal);
         private Exception? _jobUpdateFailure;
 
-        public ControlPlaneApiFactory()
+        public ControlPlaneApiFactory(bool enableSwagger = true)
         {
+            _enableSwagger = enableSwagger;
             Environment.SetEnvironmentVariable("ApiSecurity__ApiKey", ValidApiKey);
             Environment.SetEnvironmentVariable("ApiSecurity__ApiKeys__0", ValidApiKey);
             Environment.SetEnvironmentVariable("ApiSecurity__ApiKeys__1", RotatedApiKey);
@@ -358,6 +371,7 @@ public class ApiSecurityTests
                     ["Routing:Model"] = "gpt-4.1",
                     ["Routing:PolicyVersion"] = "test",
                     ["Retry:MaxAttempts"] = "3",
+                    ["ControlPlaneApi:EnableSwagger"] = _enableSwagger ? "true" : "false",
                     ["HostedWorkers:EnablePostAcceptResumeWorker"] = "false",
                     ["HostedWorkers:EnableOutboxWorker"] = "false",
                     ["HostedWorkers:EnableResultQueueWorker"] = "false",
@@ -379,6 +393,7 @@ public class ApiSecurityTests
                 services.RemoveAll<IResultStore>();
                 services.RemoveAll<IAmazonDynamoDB>();
                 services.RemoveAll<IAmazonSQS>();
+                services.RemoveAll<ControlPlaneApiHostOptions>();
 
                 JobStore.ListAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<JobSummary>>(Array.Empty<JobSummary>()));
@@ -407,6 +422,18 @@ public class ApiSecurityTests
                 services.AddSingleton(DynamoDb);
                 services.AddSingleton(Sqs);
                 services.AddSingleton<IPostAcceptResumeScheduler>(new ManualOnlyPostAcceptResumeScheduler());
+                services.AddSingleton(new ControlPlaneApiHostOptions
+                {
+                    EnableSwagger = _enableSwagger,
+                    HostedWorkers = new HostedWorkerOptions
+                    {
+                        EnablePostAcceptResumeWorker = false,
+                        EnableOutboxWorker = false,
+                        EnableResultQueueWorker = false
+                    },
+                    OutboxWorker = new OutboxWorkerOptions(),
+                    ResultQueueWorker = new ResultQueueWorkerOptions()
+                });
             });
         }
 

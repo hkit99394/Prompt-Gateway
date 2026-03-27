@@ -657,6 +657,14 @@ The control-plane HTTP edge still assumes an ECS-hosted ASP.NET Core app entry p
 - The HTTP control plane can be started from both ECS and Lambda-oriented hosts using shared registration.
 - Host-specific bootstrapping is thin and explicit.
 
+**Status:** Complete
+
+**Completion notes**
+
+- The HTTP API bootstrap now lives in shared API-level service-registration and app-mapping extensions instead of being embedded directly in `Program.cs`.
+- Host-specific behavior is explicit through `ControlPlaneApiHostOptions`, which lets a future Lambda host reuse the same HTTP contract wiring while changing hosted workers or Swagger exposure deliberately.
+- The ECS `Program.cs` entry point is now a thin host shell.
+
 ### PG-602 Serverless-safe HTTP runtime behavior
 
 - Primary owner: `control-plane-core`
@@ -684,6 +692,14 @@ Health checks, post-accept continuation, and operational endpoints still assume 
 
 - Lambda-hosted HTTP behavior is defined and tested.
 - No hidden dependency remains on ECS-only hosted behavior.
+
+**Status:** In Progress
+
+**Completion notes**
+
+- Serverless-sensitive host behavior is now more explicit through `ControlPlaneApiHostOptions`.
+- Swagger exposure can now be controlled through `ControlPlaneApi:EnableSwagger`, and coverage exists for the disabled host path.
+- Remaining work is to define the Lambda HTTP operational model for readiness and post-accept continuation once the HTTP host itself is serverless.
 
 ---
 

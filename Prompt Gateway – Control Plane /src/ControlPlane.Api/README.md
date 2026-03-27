@@ -6,9 +6,12 @@
 - Lambda is the target runtime for queue-driven dispatch, provider execution, and result ingestion.
 - The API host keeps only the HTTP edge plus small control-plane coordination work such as post-accept continuation.
 - The next migration phases are expected to move the HTTP control plane to Lambda/API Gateway.
+- The HTTP bootstrap is now shared through API-level composition extensions so a future Lambda host can reuse the same contract wiring while overriding host-specific options.
 
 ## Required configuration
 
+- Optional HTTP host settings:
+  - `ControlPlaneApi__EnableSwagger` (defaults to `true`)
 - Configure at least one API key using one of:
   - `ApiSecurity__ApiKeys__0`, `ApiSecurity__ApiKeys__1`, ...
   - `ApiSecurity__ApiKey` (single key fallback)
