@@ -1,10 +1,22 @@
 # ControlPlane.Api Operations Runbook
 
+## Platform decision
+
+- Queue-driven dispatch, provider execution, and result ingestion are designed to run in Lambda mode.
+- The HTTP control plane now has both ECS and Lambda hosts in the repo.
+- Lambda/API Gateway promotion for the HTTP edge is in progress, with `ControlPlane.Api.Lambda` available behind `enable_lambda_http_api`.
+- The ECS API host remains the rollback edge until HTTP cutover evidence is complete; it is not the only intended long-term path anymore.
+- The shared HTTP bootstrap keeps the request contract aligned across both hosts while allowing host-specific options such as hosted workers and Swagger exposure.
+- When the Lambda HTTP edge is enabled, API Gateway now performs a request-authorizer API-key check before forwarding protected routes. The ASP.NET host still enforces the same API-key contract as an application-layer backstop.
+
 ## Required configuration
 
+- Optional HTTP host settings:
+  - `ControlPlaneApi__EnableSwagger` (defaults to `true`)
 - Configure at least one API key using one of:
   - `ApiSecurity__ApiKeys__0`, `ApiSecurity__ApiKeys__1`, ...
   - `ApiSecurity__ApiKey` (single key fallback)
+  - `ApiSecurity__ApiKeyValueFrom` (Lambda-only secret/parameter reference; the host resolves this into `ApiSecurity__ApiKey` during cold start)
 - Configure DynamoDB storage:
   - `AwsStorage__TableName`
   - `AwsStorage__JobListIndexName` (defaults to `gsi1`, expected key schema: `gsi1pk` + `gsi1sk`)
@@ -12,6 +24,13 @@
   - `AwsStorage__OutboxTerminalTtlDays` (defaults to `7`)
   - `AwsStorage__EventTtlDays` (defaults to `30`)
   - `AwsStorage__ResultTtlDays` (defaults to `30`)
+- Hosted background workers default to enabled:
+  - `HostedWorkers__EnablePostAcceptResumeWorker` (defaults to `true`)
+  - `HostedWorkers__EnableOutboxWorker` (defaults to `true`)
+  - `HostedWorkers__EnableResultQueueWorker` (defaults to `true`)
+- Lambda HTTP host defaults:
+  - `ControlPlane.Api.Lambda` forces Swagger off.
+  - `ControlPlane.Api.Lambda` forces all hosted workers off, so accepted jobs will usually return `requiresResume=true`.
 - Do not store production keys in `appsettings.json`.
 - Keep keys in an environment variable source or external secret manager.
 
@@ -25,6 +44,18 @@
 ## Request contract
 
 - Header: `X-API-Key`
+- Optional header: `X-Idempotency-Key`
+  - When supplied, the API derives a stable job identity so retried `POST /jobs` calls can safely replay the accepted job.
+- `POST /jobs` returns once the job is durably accepted.
+  - Follow-up routing and dispatch continue asynchronously when the post-accept worker is enabled.
+  - If the response includes `requiresResume=true`, call `POST /jobs/{jobId}/resume` to continue processing manually.
+  - This manual-resume path is expected for the Lambda HTTP host until post-accept continuation is moved to a fully serverless mechanism.
+- `POST /jobs` for `taskType=chat_completion` requires either inline prompt content or a prompt reference:
+  - `promptText` (inline per-request prompt body)
+  - `inputRef` (legacy-compatible, mapped to worker prompt key)
+  - `promptKey`
+  - `promptS3Key`
+  - When `promptText` is present, the worker uses it directly; prompt references remain the path for prepared/shared prompts stored in S3.
 - Protected endpoints:
   - `POST /jobs`
   - `POST /jobs/{jobId}/resume`
@@ -52,23 +83,41 @@ curl -i \
   -X POST \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $CONTROL_PLANE_API_KEY" \
-  -d '{"taskType":"chat_completion"}' \
+  -d '{"taskType":"chat_completion","inputRef":"prompts/job-123.txt"}' \
+  "http://localhost:5000/jobs"
+```
+
+```bash
+curl -i \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $CONTROL_PLANE_API_KEY" \
+  -d '{"taskType":"chat_completion","promptText":"Explain retrieval-augmented generation simply.","systemPrompt":"You are concise."}' \
   "http://localhost:5000/jobs"
 ```
 
 ## Expected response codes
 
-- `200`: request accepted or read operation succeeded
-- `400`: invalid request payload (for example missing `taskType`)
+- `202`: job intake accepted
+- `200`: read operation succeeded
+- `400`: invalid request payload (for example missing `taskType` or both inline prompt content and prompt reference for `chat_completion`)
 - `401`: missing/invalid `X-API-Key`
-- `409`: orchestration state conflict (for example concurrent update conflict)
+- `409`: orchestration state conflict or idempotency key/job ID reused for a different request
 
 ## Troubleshooting
 
 - Startup fails with API key configuration error:
   - Ensure at least one key exists in `ApiSecurity:ApiKeys` or `ApiSecurity:ApiKey`.
+- Unexpected provider fallback in a single-provider deployment:
+  - Leave `Routing:FallbackProviders` empty unless that provider runtime is actually deployed.
 - Requests return `401`:
   - Verify `X-API-Key` header is present.
   - Confirm key value exactly matches configured key (case-sensitive).
 - Unexpected `409`:
   - Retry the request after reloading current job state.
+- ECS API should stop polling queues after Lambda cutover:
+  - Set `HostedWorkers__EnablePostAcceptResumeWorker=false` if you want all post-accept continuation to be manual during debugging.
+  - Set `HostedWorkers__EnableOutboxWorker=false`.
+  - Set `HostedWorkers__EnableResultQueueWorker=false`.
+- ECS provider-worker retirement is not complete yet:
+  - Keep the provider ECS service as a rollback path until Lambda mode is proven through a full staging-to-prod promotion cycle with recorded rollback evidence.

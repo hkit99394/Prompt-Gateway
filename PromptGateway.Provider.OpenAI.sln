@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Provider.Worker.Aws", "Prom
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Provider.Worker.Host", "Prompt Gateway Provider - OpenAI\src\Provider.Worker.Host\Provider.Worker.Host.csproj", "{BEBCD1C5-198C-4101-9C51-1401365E9ABA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Provider.Worker.Lambda", "Prompt Gateway Provider - OpenAI\src\Provider.Worker.Lambda\Provider.Worker.Lambda.csproj", "{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -75,6 +77,18 @@ Global
 		{BEBCD1C5-198C-4101-9C51-1401365E9ABA}.Release|x64.Build.0 = Release|Any CPU
 		{BEBCD1C5-198C-4101-9C51-1401365E9ABA}.Release|x86.ActiveCfg = Release|Any CPU
 		{BEBCD1C5-198C-4101-9C51-1401365E9ABA}.Release|x86.Build.0 = Release|Any CPU
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}.Debug|x64.Build.0 = Debug|Any CPU
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}.Debug|x86.Build.0 = Debug|Any CPU
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}.Release|x64.ActiveCfg = Release|Any CPU
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}.Release|x64.Build.0 = Release|Any CPU
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}.Release|x86.ActiveCfg = Release|Any CPU
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -86,5 +100,6 @@ Global
 		{81FB016F-A655-4A82-B57B-E10BEB0CEDCB} = {8A32BAD4-28F9-67DB-2818-7EF0A9E32998}
 		{7518F087-6282-4053-A6E4-F442708DBCB3} = {5E3E8F38-8B16-438C-BAD6-277F0F9311B2}
 		{BEBCD1C5-198C-4101-9C51-1401365E9ABA} = {5E3E8F38-8B16-438C-BAD6-277F0F9311B2}
+		{D6A1D4C6-3E79-4FA1-9E1A-77E0FC6F5432} = {5E3E8F38-8B16-438C-BAD6-277F0F9311B2}
 	EndGlobalSection
 EndGlobal

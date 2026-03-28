@@ -15,6 +15,7 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore, ITransactio
     private const string JobListSortKeyField = "gsi1sk";
     private const string JobListPartition = "JOBS";
     private const string OutboxPartition = "OUTBOX";
+    private const string OutboxReadyPartition = "OUTBOX_READY";
     private const string OutboxStatusField = "status";
     private const string OutboxMessageField = "message_json";
     private const string OutboxCreatedAtField = "created_at";
@@ -284,6 +285,8 @@ public sealed class DynamoDbJobStore : DynamoDbStoreBase, IJobStore, ITransactio
                     {
                         [PartitionKey] = Attr(OutboxPartition),
                         [SortKey] = Attr(message.OutboxId),
+                        [JobListPartitionKeyField] = Attr(OutboxReadyPartition),
+                        [JobListSortKeyField] = Attr(outboxCreatedAt),
                         [OutboxStatusField] = Attr("pending"),
                         [OutboxCreatedAtField] = Attr(outboxCreatedAt),
                         [OutboxMessageField] = Attr(serializedOutbox)

@@ -1,0 +1,67 @@
+# CD workflow - deploy to prod manually via the repo promotion scripts
+# Implementation: T-4.2.4, T-4.2.5, T-4.2.6, T-4.3.15, T-7.9
+#
+# Prerequisites:
+# - Configure GitHub OIDC with AWS
+# - Add AWS_ROLE_ARN to the prod environment
+# - Add CERTIFICATE_ARN to the prod environment
+# - Configure required reviewers in Settings -> Environments -> prod
+# - Ensure Terraform backend resources already exist for prod
+# - Ensure prod secrets already exist for the smoke test
+
+name: CD Prod
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Prod
+    runs-on: ubuntu-latest
+    environment: ${{ vars.DEPLOY_ENV_NAME || 'prod' }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ fromJSON(toJSON(vars)).AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Write prod tfvars
+        env:
+          CERTIFICATE_ARN: ${{ vars.CERTIFICATE_ARN }}
+          ALARM_EMAIL: ${{ vars.ALARM_EMAIL }}
+        run: |
+          if [ -z "${CERTIFICATE_ARN:-}" ]; then
+            echo "CERTIFICATE_ARN GitHub environment variable is required for prod deployments."
+            exit 1
+          fi
+
+          TFVARS_PATH="infra/terraform/environments/prod/prod.tfvars"
+          printf 'aws_region = "us-east-1"\nenvironment = "prod"\ncertificate_arn = "%s"\n' "$CERTIFICATE_ARN" > "$TFVARS_PATH"
+          if [ -n "${ALARM_EMAIL:-}" ]; then
+            printf 'alarm_email = "%s"\n' "$ALARM_EMAIL" >> "$TFVARS_PATH"
+          fi
+
+      - name: Promote Lambda mode to prod
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          API_KEY: ${{ secrets.SMOKE_TEST_API_KEY }}
+          HEALTH_CHECK_BASE_URL: ${{ vars.HEALTH_CHECK_BASE_URL }}
+          HTTP_EDGE_MODE: lambda
+        run: ./scripts/promote-lambda-mode.sh prod

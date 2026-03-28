@@ -51,9 +51,13 @@ public class OpenAiClient(IOptions<ProviderWorkerOptions> options) : IOpenAiClie
             {
                 throw;
             }
-            catch (Exception) when (attempt < maxAttempts)
+            catch (Exception ex) when (attempt < maxAttempts && OpenAiFailureClassifier.ShouldRetry(ex))
             {
                 await Task.Delay(BackoffDelay(attempt, _options.OpenAiRetryMaxBackoffSeconds), cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                throw OpenAiFailureClassifier.Translate(ex);
             }
         }
     }
@@ -84,10 +88,12 @@ public class OpenAiClient(IOptions<ProviderWorkerOptions> options) : IOpenAiClie
         {
             var errorMessage = response.Error?.Message
                                ?? $"OpenAI response status: {response.Status}";
+            var errorType = response.Error?.Code.ToString() ?? "provider_error";
             throw new OpenAiException(
-                response.Error?.Code.ToString() ?? "provider_error",
+                errorType,
                 errorMessage,
-                JsonSerializer.Serialize(response));
+                JsonSerializer.Serialize(response),
+                OpenAiFailureClassifier.IsRetryableErrorType(errorType));
         }
         var rawJson = JsonSerializer.Serialize(response);
         var outputText = response.GetOutputText() ?? string.Empty;
@@ -139,11 +145,13 @@ public class OpenAiClient(IOptions<ProviderWorkerOptions> options) : IOpenAiClie
     }
 }
 
-public class OpenAiException(string errorType, string message, string? rawPayload) : Exception(message)
+public class OpenAiException(string errorType, string message, string? rawPayload, bool isRetryable = false) : Exception(message)
 {
     public string ErrorType { get; } = errorType;
 
     public string? RawPayload { get; } = rawPayload;
+
+    public bool IsRetryable { get; } = isRetryable;
 }
 
 public class OpenAiResult

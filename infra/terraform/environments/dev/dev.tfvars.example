@@ -1,0 +1,14 @@
+# Dev environment variable values (copy to dev.tfvars and fill in)
+# Usage: terraform plan -var-file=dev.tfvars
+# NEVER commit dev.tfvars - it may contain sensitive values
+# Dev uses HTTP-only (no certificate_arn); staging/prod require certificate_arn
+
+aws_region  = "us-east-1"
+environment = "dev"
+# Optional: email for CloudWatch alarm notifications (T-8.6)
+# alarm_email = "ops@example.com"
+# Optional Lambda cutover:
+# enable_lambda_processing = true
+# provider_lambda_package_path = "artifacts/provider-worker-lambda.zip"
+# result_lambda_package_path = "artifacts/control-plane-result-lambda.zip"
+# outbox_lambda_package_path = "artifacts/control-plane-outbox-lambda.zip"

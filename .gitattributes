@@ -1,0 +1,3 @@
+# Normalize line endings so scripts work without manual fix (no CRLF).
+*.sh text eol=lf
+*.bash text eol=lf

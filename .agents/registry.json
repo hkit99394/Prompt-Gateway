@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "purpose": "Project-local subagent roster for Prompt Gateway ECS-to-Lambda migration work.",
+  "agents": [
+    {
+      "name": "runtime-extraction",
+      "file": ".agents/runtime-extraction.md",
+      "role": "primary",
+      "phases": ["phase-1"],
+      "sidecar": false
+    },
+    {
+      "name": "control-plane-core",
+      "file": ".agents/control-plane-core.md",
+      "role": "primary",
+      "phases": ["phase-0", "phase-1", "phase-2", "phase-3", "phase-4"],
+      "sidecar": false
+    },
+    {
+      "name": "provider-execution",
+      "file": ".agents/provider-execution.md",
+      "role": "primary",
+      "phases": ["phase-1", "phase-2", "phase-3"],
+      "sidecar": false
+    },
+    {
+      "name": "async-event-processing",
+      "file": ".agents/async-event-processing.md",
+      "role": "primary",
+      "phases": ["phase-2", "phase-3"],
+      "sidecar": false
+    },
+    {
+      "name": "lambda-platform",
+      "file": ".agents/lambda-platform.md",
+      "role": "primary",
+      "phases": ["phase-0", "phase-2", "phase-3", "phase-4", "phase-5"],
+      "sidecar": false
+    },
+    {
+      "name": "release-verification",
+      "file": ".agents/release-verification.md",
+      "role": "sidecar",
+      "phases": ["phase-2", "phase-3", "phase-4", "phase-5"],
+      "sidecar": true
+    },
+    {
+      "name": "code-review",
+      "file": ".agents/code-review.md",
+      "role": "sidecar",
+      "phases": ["phase-1", "phase-2", "phase-3", "phase-4", "phase-5"],
+      "sidecar": true
+    },
+    {
+      "name": "aws-security",
+      "file": ".agents/aws-security.md",
+      "role": "sidecar",
+      "phases": ["phase-0", "phase-1", "phase-2", "phase-3", "phase-4", "phase-5"],
+      "sidecar": true
+    },
+    {
+      "name": "observability",
+      "file": ".agents/observability.md",
+      "role": "sidecar",
+      "phases": ["phase-1", "phase-2", "phase-3", "phase-4", "phase-5"],
+      "sidecar": true
+    }
+  ]
+}

@@ -45,10 +45,25 @@ Update `Prompt Gateway Provider - OpenAI/src/Provider.Worker.Host/appsettings.js
 - `ProviderWorker__ResultBucket` (optional)
 - `ProviderWorker__DedupeTableName` (optional DynamoDB table with `id` (PK) and TTL)
 - `ProviderWorker__OpenAi__ApiKey`
+- `ProviderWorker__OpenAi__TimeoutSeconds`
+- `ProviderWorker__OpenAiRetryMaxAttempts`
+- `ProviderWorker__OpenAiRetryMaxBackoffSeconds`
+- `ProviderWorker__ExecutionTimeoutSeconds` (Lambda/runtime budget guard)
+- `ProviderWorker__VisibilityTimeoutSeconds` (queue visibility budget guard)
 
 Notes:
 - Startup validates required settings and fails fast if they are missing.
 - Prompt bucket overrides are blocked unless they match the configured `ProviderWorker__PromptBucket`.
+
+## Tuning rules
+
+- The provider Lambda currently processes SQS records sequentially within an invocation, so `provider_lambda_batch_size` should stay small. The default is now `1`.
+- Worst-case invocation window is derived from:
+  - `MaxMessages * ((OpenAiRetryMaxAttempts * OpenAi.TimeoutSeconds) + retry backoff budget + ProcessingOverheadBufferSeconds)`
+- In Lambda mode:
+  - `ProviderWorker__ExecutionTimeoutSeconds` must be at least that worst-case invocation window.
+  - `ProviderWorker__VisibilityTimeoutSeconds` must be at least that same window.
+- Reserved concurrency is the primary cap on parallel OpenAI calls in Lambda mode. Increase it deliberately alongside provider rate-limit and budget expectations.
 
 ## Example job payload
 

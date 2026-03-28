@@ -1,0 +1,65 @@
+# CD workflow - deploy to dev on push to main via the repo promotion scripts
+# Implementation: T-4.1.x, T-4.3.x, T-7.9
+#
+# Prerequisites:
+# - Configure GitHub OIDC with AWS (oidc-provider, IAM role)
+# - Add AWS_ROLE_ARN to the dev environment (or repo secret)
+# - Ensure Terraform backend resources already exist for dev
+# - Ensure dev secrets/SSM parameters already exist for the smoke test
+
+name: CD Dev
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    environment: ${{ vars.DEPLOY_ENV_NAME || 'dev' }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ fromJSON(toJSON(vars)).AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Write dev tfvars
+        env:
+          ALARM_EMAIL: ${{ vars.ALARM_EMAIL }}
+        run: |
+          TFVARS_PATH="infra/terraform/environments/dev/dev.tfvars"
+          printf 'aws_region = "us-east-1"\nenvironment = "dev"\n' > "$TFVARS_PATH"
+          if [ -n "${ALARM_EMAIL:-}" ]; then
+            printf 'alarm_email = "%s"\n' "$ALARM_EMAIL" >> "$TFVARS_PATH"
+          fi
+
+      - name: Deploy Lambda mode to dev
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          HTTP_EDGE_MODE: lambda
+        run: ./scripts/first-deploy-phase3.sh --processing-mode lambda
+
+      - name: Smoke test dev
+        env:
+          API_KEY: ${{ fromJSON(toJSON(secrets)).SMOKE_TEST_API_KEY }}
+          HEALTH_CHECK_BASE_URL: ${{ vars.HEALTH_CHECK_BASE_URL }}
+          HTTP_EDGE_MODE: lambda
+        run: ./scripts/first-deploy-phase4.sh

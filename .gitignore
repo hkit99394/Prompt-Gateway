@@ -26,3 +26,6 @@ obj/
 
 ## Logs
 *.log
+
+## Deployment artifacts
+artifacts/

@@ -1,0 +1,46 @@
+# CI workflow - build and test on pull request
+# Implementation: T-3.1.x, T-3.2.x
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore Control Plane
+        run: dotnet restore "./Prompt Gateway – Control Plane /tests/ControlPlane.Core.Tests/ControlPlane.Core.Tests.csproj"
+
+      - name: Build Control Plane
+        run: dotnet build "./Prompt Gateway – Control Plane /tests/ControlPlane.Core.Tests/ControlPlane.Core.Tests.csproj" --no-restore -c Release
+
+      - name: Test Control Plane
+        run: dotnet test "./Prompt Gateway – Control Plane /tests/ControlPlane.Core.Tests/ControlPlane.Core.Tests.csproj" --no-build -c Release --verbosity normal
+
+      - name: Restore Provider Worker
+        run: dotnet restore PromptGateway.Provider.OpenAI.sln
+
+      - name: Build Provider Worker
+        run: dotnet build PromptGateway.Provider.OpenAI.sln --no-restore -c Release
+
+      - name: Test Provider Worker
+        run: dotnet test PromptGateway.Provider.OpenAI.sln --no-build -c Release --verbosity normal
