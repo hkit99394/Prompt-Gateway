@@ -17,6 +17,11 @@ public class PromptTemplateStore(IObjectStore objectStore, IOptions<ProviderWork
 
     public async Task<string> GetTemplateAsync(CanonicalJobRequest job, CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(job.PromptText))
+        {
+            return job.PromptText;
+        }
+
         var requestedBucket = job.PromptBucket ?? job.PromptS3Bucket;
         var key = job.PromptKey ?? job.PromptS3Key;
         if (string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(job.InputRef))

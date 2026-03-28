@@ -90,4 +90,43 @@ public class SqsDispatchQueueTests
         Assert.That(root.GetProperty("prompt_s3_bucket").GetString(), Is.EqualTo("prompt-bucket"));
         Assert.That(root.GetProperty("prompt_s3_key").GetString(), Is.EqualTo("prompts/job-2.txt"));
     }
+
+    [Test]
+    public async Task PublishAsync_IncludesInlinePromptText()
+    {
+        var sqs = Substitute.For<IAmazonSQS>();
+        SendMessageRequest? captured = null;
+        sqs.SendMessageAsync(Arg.Do<SendMessageRequest>(request => captured = request), Arg.Any<CancellationToken>())
+            .Returns(new SendMessageResponse());
+
+        var dispatchQueue = new SqsDispatchQueue(sqs, new AwsQueueOptions
+        {
+            DispatchQueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789012/dispatch"
+        });
+
+        var message = new DispatchMessage
+        {
+            JobId = "job-3",
+            AttemptId = "attempt-3",
+            TraceId = "trace-3",
+            Provider = "openai",
+            Model = "gpt-4.1",
+            IdempotencyKey = "job-3:attempt-3",
+            Request = new CanonicalJobRequest
+            {
+                JobId = "job-3",
+                AttemptId = "attempt-3",
+                TraceId = "trace-3",
+                TaskType = "chat_completion",
+                PromptText = "inline prompt"
+            }
+        };
+
+        await dispatchQueue.PublishAsync(message, CancellationToken.None);
+
+        Assert.That(captured, Is.Not.Null);
+        using var body = JsonDocument.Parse(captured!.MessageBody);
+        var root = body.RootElement;
+        Assert.That(root.GetProperty("prompt_text").GetString(), Is.EqualTo("inline prompt"));
+    }
 }

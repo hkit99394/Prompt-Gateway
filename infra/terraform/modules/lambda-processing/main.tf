@@ -70,6 +70,18 @@ resource "aws_cloudwatch_log_group" "control_plane_http" {
   }
 }
 
+resource "aws_cloudwatch_log_group" "control_plane_http_authorizer" {
+  count = local.http_api_enabled ? 1 : 0
+
+  name              = "/aws/lambda/prompt-gateway-${var.environment}-control-plane-http-authorizer"
+  retention_in_days = var.log_retention_in_days
+
+  tags = {
+    Name        = "prompt-gateway-${var.environment}-control-plane-http-authorizer"
+    Environment = var.environment
+  }
+}
+
 resource "aws_lambda_function" "provider" {
   count = local.processing_enabled ? 1 : 0
 
@@ -202,6 +214,29 @@ resource "aws_lambda_function" "control_plane_http" {
   depends_on = [aws_cloudwatch_log_group.control_plane_http]
 }
 
+resource "aws_lambda_function" "control_plane_http_authorizer" {
+  count = local.http_api_enabled ? 1 : 0
+
+  function_name                  = "prompt-gateway-${var.environment}-control-plane-http-authorizer"
+  role                           = var.control_plane_http_authorizer_lambda_role_arn
+  runtime                        = var.lambda_runtime
+  handler                        = var.control_plane_http_authorizer_lambda_handler
+  filename                       = var.control_plane_http_authorizer_lambda_package_path
+  source_code_hash               = filebase64sha256(var.control_plane_http_authorizer_lambda_package_path)
+  timeout                        = var.control_plane_http_authorizer_lambda_timeout
+  memory_size                    = var.control_plane_http_authorizer_lambda_memory_size
+  publish                        = true
+  reserved_concurrent_executions = var.control_plane_http_authorizer_lambda_reserved_concurrency
+
+  environment {
+    variables = {
+      ApiSecurity__ApiKeyValueFrom = local.api_keys_value_from
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.control_plane_http_authorizer]
+}
+
 resource "aws_apigatewayv2_api" "control_plane_http" {
   count = local.http_api_enabled ? 1 : 0
 
@@ -214,6 +249,19 @@ resource "aws_apigatewayv2_api" "control_plane_http" {
     allow_origins = ["*"]
     max_age       = 300
   }
+}
+
+resource "aws_apigatewayv2_authorizer" "control_plane_http" {
+  count = local.http_api_enabled ? 1 : 0
+
+  api_id                            = aws_apigatewayv2_api.control_plane_http[0].id
+  name                              = "prompt-gateway-${var.environment}-control-plane-http"
+  authorizer_type                   = "REQUEST"
+  authorizer_uri                    = aws_lambda_function.control_plane_http_authorizer[0].invoke_arn
+  authorizer_payload_format_version = "2.0"
+  enable_simple_responses           = true
+  authorizer_result_ttl_in_seconds  = 60
+  identity_sources                  = ["$request.header.X-API-Key"]
 }
 
 resource "aws_apigatewayv2_integration" "control_plane_http" {
@@ -229,9 +277,47 @@ resource "aws_apigatewayv2_integration" "control_plane_http" {
 resource "aws_apigatewayv2_route" "control_plane_http_default" {
   count = local.http_api_enabled ? 1 : 0
 
-  api_id    = aws_apigatewayv2_api.control_plane_http[0].id
-  route_key = "$default"
-  target    = "integrations/${aws_apigatewayv2_integration.control_plane_http[0].id}"
+  api_id             = aws_apigatewayv2_api.control_plane_http[0].id
+  route_key          = "$default"
+  target             = "integrations/${aws_apigatewayv2_integration.control_plane_http[0].id}"
+  authorization_type = "CUSTOM"
+  authorizer_id      = aws_apigatewayv2_authorizer.control_plane_http[0].id
+}
+
+resource "aws_apigatewayv2_route" "control_plane_http_health" {
+  count = local.http_api_enabled ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.control_plane_http[0].id
+  route_key          = "GET /health"
+  target             = "integrations/${aws_apigatewayv2_integration.control_plane_http[0].id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_route" "control_plane_http_ready" {
+  count = local.http_api_enabled ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.control_plane_http[0].id
+  route_key          = "GET /ready"
+  target             = "integrations/${aws_apigatewayv2_integration.control_plane_http[0].id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_route" "control_plane_http_swagger" {
+  count = local.http_api_enabled ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.control_plane_http[0].id
+  route_key          = "GET /swagger"
+  target             = "integrations/${aws_apigatewayv2_integration.control_plane_http[0].id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_route" "control_plane_http_swagger_proxy" {
+  count = local.http_api_enabled ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.control_plane_http[0].id
+  route_key          = "GET /swagger/{proxy+}"
+  target             = "integrations/${aws_apigatewayv2_integration.control_plane_http[0].id}"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_stage" "control_plane_http_default" {
@@ -250,6 +336,16 @@ resource "aws_lambda_permission" "allow_control_plane_http_api" {
   function_name = aws_lambda_function.control_plane_http[0].function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.control_plane_http[0].execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "allow_control_plane_http_authorizer_api" {
+  count = local.http_api_enabled ? 1 : 0
+
+  statement_id  = "AllowAuthorizerExecutionFromApiGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.control_plane_http_authorizer[0].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.control_plane_http[0].execution_arn}/authorizers/${aws_apigatewayv2_authorizer.control_plane_http[0].id}"
 }
 
 resource "aws_lambda_event_source_mapping" "provider" {

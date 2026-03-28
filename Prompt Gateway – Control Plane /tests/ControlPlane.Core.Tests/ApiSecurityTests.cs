@@ -120,6 +120,27 @@ public class ApiSecurityTests
     }
 
     [Test]
+    public async Task CreateJob_WithInlinePrompt_ReturnsAccepted()
+    {
+        await using var factory = new ControlPlaneApiFactory();
+        factory.EnableInMemoryJobPersistence();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(ApiKeyAuthenticationHandler.HeaderName, ControlPlaneApiFactory.ValidApiKey);
+
+        using var content = new StringContent(
+            """{"taskType":"chat_completion","promptText":"Explain vector databases simply."}""",
+            Encoding.UTF8,
+            "application/json");
+
+        var response = await client.PostAsync("/jobs", content);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Accepted));
+        using var json = await ReadJsonAsync(response);
+        Assert.That(json.RootElement.GetProperty("accepted").GetBoolean(), Is.True);
+        Assert.That(json.RootElement.GetProperty("requiresResume").GetBoolean(), Is.True);
+    }
+
+    [Test]
     public async Task CreateJob_DoesNotRouteOrDispatchInline()
     {
         await using var factory = new ControlPlaneApiFactory();

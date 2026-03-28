@@ -18,7 +18,8 @@
 #   - HEALTH_CHECK_BASE_URL: same as BASE_URL; used when set to avoid --insecure for custom domains
 #   - SMOKE_INPUT_REF: prompt key or s3://bucket/key override (default: prompts/smoke-test.txt)
 #   - SMOKE_PROMPT_BUCKET: explicit prompt bucket override when SMOKE_INPUT_REF is not an S3 URI
-#   - SMOKE_PROMPT_TEXT: prompt body uploaded before the smoke test
+#   - SMOKE_PROMPT_TEXT: prompt body uploaded before the smoke test for the prepared prompt path
+#   - SMOKE_INLINE_PROMPT_TEXT: inline prompt body submitted directly to POST /jobs
 #   - SMOKE_SKIP_PROMPT_UPLOAD=true: skip uploading the smoke prompt fixture
 #   - AWS_REGION: default us-east-1
 #
@@ -35,6 +36,7 @@ USE_INSECURE=""
 [ "${1:-}" = "--insecure" ] && USE_INSECURE="--insecure"
 INPUT_REF="${SMOKE_INPUT_REF:-prompts/smoke-test.txt}"
 SMOKE_PROMPT_TEXT="${SMOKE_PROMPT_TEXT:-Reply with exactly: smoke test ok}"
+SMOKE_INLINE_PROMPT_TEXT="${SMOKE_INLINE_PROMPT_TEXT:-Reply with exactly: inline smoke test ok}"
 SMOKE_SKIP_PROMPT_UPLOAD="${SMOKE_SKIP_PROMPT_UPLOAD:-false}"
 VERIFY_ECS_HTTP_STATE="${VERIFY_ECS_HTTP_STATE:-true}"
 
@@ -184,13 +186,14 @@ verify_ecs_http_state() {
   fi
 }
 
-# T-5.4.1 – T-5.4.5: run smoke-test.sh (GET /health, GET /ready, POST /jobs, poll, GET /result)
+# T-5.4.1 – T-5.4.5: run smoke-test.sh
+# The helper now verifies both the prepared prompt reference path and inline prompt submission.
 cd "$REPO_ROOT"
 chmod +x scripts/smoke-test.sh
 if [ -n "$USE_INSECURE" ]; then
-  SMOKE_INPUT_REF="$INPUT_REF" ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY" "$USE_INSECURE"
+  SMOKE_INPUT_REF="$INPUT_REF" SMOKE_INLINE_PROMPT_TEXT="$SMOKE_INLINE_PROMPT_TEXT" ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY" "$USE_INSECURE"
 else
-  SMOKE_INPUT_REF="$INPUT_REF" ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY"
+  SMOKE_INPUT_REF="$INPUT_REF" SMOKE_INLINE_PROMPT_TEXT="$SMOKE_INLINE_PROMPT_TEXT" ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY"
 fi
 
 verify_ecs_http_state

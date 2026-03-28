@@ -6,6 +6,7 @@
 #   artifacts/control-plane-result-lambda.zip
 #   artifacts/control-plane-outbox-lambda.zip
 #   artifacts/control-plane-api-lambda.zip
+#   artifacts/control-plane-authorizer-lambda.zip
 #
 # Usage:
 #   ./scripts/package-lambda-artifacts.sh
@@ -76,9 +77,16 @@ package_project \
   "Control Plane API Lambda" \
   "net8.0"
 
+package_project \
+  "$REPO_ROOT/Prompt Gateway – Control Plane /src/ControlPlane.Api.Authorizer/ControlPlane.Api.Authorizer.csproj" \
+  "$ARTIFACTS_DIR/control-plane-authorizer-lambda.zip" \
+  "Control Plane API Authorizer Lambda" \
+  "net8.0"
+
 echo ""
 echo "Done. Terraform defaults now point at:"
 echo "  artifacts/provider-worker-lambda.zip"
 echo "  artifacts/control-plane-result-lambda.zip"
 echo "  artifacts/control-plane-outbox-lambda.zip"
 echo "  artifacts/control-plane-api-lambda.zip"
+echo "  artifacts/control-plane-authorizer-lambda.zip"

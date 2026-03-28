@@ -71,3 +71,9 @@ variable "control_plane_http_lambda_package_path" {
   type        = string
   default     = "artifacts/control-plane-api-lambda.zip"
 }
+
+variable "control_plane_http_authorizer_lambda_package_path" {
+  description = "Path to the Control Plane HTTP authorizer Lambda zip package"
+  type        = string
+  default     = "artifacts/control-plane-authorizer-lambda.zip"
+}

@@ -22,6 +22,7 @@ These docs are mainly kept as planning history and design record. They may still
 | Document | Status | Notes |
 |------|------|---------|
 | `docs/DEPLOYMENT_PLAN.md` | Historical plan record | Original deployment and CI/CD plan; parts of it are now superseded by implemented repo state |
+| `docs/IMPLEMENTATION_BACKLOG_ACHIEVED.md` | Historical record | Archived completed phase backlog as of March 28, 2026 |
 | `docs/ECS_TO_LAMBDA_PLAN.md` | Planning record | Migration strategy and sequencing guidance |
 | `docs/P1_CONTRACT_FIX_PLAN.md` | Historical change record | Records the contract-fix work and intended rollout |
 | `docs/P2_LIFECYCLE_TIMEOUT_PLAN.md` | Historical change record | Records lifecycle/timeout hardening work |
@@ -46,5 +47,7 @@ These docs are mainly kept as planning history and design record. They may still
   - Current operational truth.
 - `docs/IMPLEMENTATION_BACKLOG.md`
   - Current future work.
+- `docs/IMPLEMENTATION_BACKLOG_ACHIEVED.md`
+  - Archived completed phase backlog.
 - `docs/*_PLAN.md`
   - Planning or historical records only.

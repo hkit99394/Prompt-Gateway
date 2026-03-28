@@ -40,9 +40,9 @@ public sealed class JobsController : ControllerBase
         }
 
         if (string.Equals(request.TaskType, "chat_completion", StringComparison.OrdinalIgnoreCase)
-            && !request.HasPromptReference())
+            && !request.HasPromptSource())
         {
-            return BadRequest(new { error = "prompt reference is required (inputRef, promptKey, or promptS3Key)" });
+            return BadRequest(new { error = "prompt content is required (promptText, inputRef, promptKey, or promptS3Key)" });
         }
 
         var normalizedRequest = NormalizeIntakeRequest(request);

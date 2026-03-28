@@ -23,11 +23,12 @@ provider "aws" {
 }
 
 locals {
-  repo_root                              = abspath("${path.root}/../../../..")
-  provider_lambda_package_path           = startswith(var.provider_lambda_package_path, "/") ? var.provider_lambda_package_path : abspath("${local.repo_root}/${var.provider_lambda_package_path}")
-  result_lambda_package_path             = startswith(var.result_lambda_package_path, "/") ? var.result_lambda_package_path : abspath("${local.repo_root}/${var.result_lambda_package_path}")
-  outbox_lambda_package_path             = startswith(var.outbox_lambda_package_path, "/") ? var.outbox_lambda_package_path : abspath("${local.repo_root}/${var.outbox_lambda_package_path}")
-  control_plane_http_lambda_package_path = startswith(var.control_plane_http_lambda_package_path, "/") ? var.control_plane_http_lambda_package_path : abspath("${local.repo_root}/${var.control_plane_http_lambda_package_path}")
+  repo_root                                         = abspath("${path.root}/../../../..")
+  provider_lambda_package_path                      = startswith(var.provider_lambda_package_path, "/") ? var.provider_lambda_package_path : abspath("${local.repo_root}/${var.provider_lambda_package_path}")
+  result_lambda_package_path                        = startswith(var.result_lambda_package_path, "/") ? var.result_lambda_package_path : abspath("${local.repo_root}/${var.result_lambda_package_path}")
+  outbox_lambda_package_path                        = startswith(var.outbox_lambda_package_path, "/") ? var.outbox_lambda_package_path : abspath("${local.repo_root}/${var.outbox_lambda_package_path}")
+  control_plane_http_lambda_package_path            = startswith(var.control_plane_http_lambda_package_path, "/") ? var.control_plane_http_lambda_package_path : abspath("${local.repo_root}/${var.control_plane_http_lambda_package_path}")
+  control_plane_http_authorizer_lambda_package_path = startswith(var.control_plane_http_authorizer_lambda_package_path, "/") ? var.control_plane_http_authorizer_lambda_package_path : abspath("${local.repo_root}/${var.control_plane_http_authorizer_lambda_package_path}")
 }
 
 module "network" {
@@ -108,28 +109,30 @@ module "ecs_service" {
 module "lambda_processing" {
   source = "../../modules/lambda-processing"
 
-  environment                               = var.environment
-  enable                                    = var.enable_lambda_processing
-  lambda_runtime                            = var.lambda_runtime
-  provider_lambda_role_arn                  = module.iam.provider_worker_lambda_role_arn
-  result_lambda_role_arn                    = module.iam.result_lambda_role_arn
-  outbox_lambda_role_arn                    = module.iam.outbox_lambda_role_arn
-  control_plane_http_lambda_role_arn        = module.iam.control_plane_http_lambda_role_arn
-  enable_http_api                           = var.enable_lambda_http_api
-  dispatch_queue_arn                        = module.sqs.dispatch_queue_arn
-  dispatch_queue_url                        = module.sqs.dispatch_queue_url
-  dispatch_queue_visibility_timeout_seconds = module.sqs.visibility_timeout_seconds
-  result_queue_arn                          = module.sqs.result_queue_arn
-  result_queue_url                          = module.sqs.result_queue_url
-  dynamodb_table_name                       = module.dynamodb.table_name
-  worker_dedupe_table_name                  = module.dynamodb.dedupe_table_name
-  dynamodb_gsi_name                         = module.dynamodb.gsi_name
-  prompts_bucket_name                       = module.s3.prompts_bucket_name
-  results_bucket_name                       = module.s3.results_bucket_name
-  provider_lambda_package_path              = local.provider_lambda_package_path
-  result_lambda_package_path                = local.result_lambda_package_path
-  outbox_lambda_package_path                = local.outbox_lambda_package_path
-  control_plane_http_lambda_package_path    = local.control_plane_http_lambda_package_path
+  environment                                       = var.environment
+  enable                                            = var.enable_lambda_processing
+  lambda_runtime                                    = var.lambda_runtime
+  provider_lambda_role_arn                          = module.iam.provider_worker_lambda_role_arn
+  result_lambda_role_arn                            = module.iam.result_lambda_role_arn
+  outbox_lambda_role_arn                            = module.iam.outbox_lambda_role_arn
+  control_plane_http_lambda_role_arn                = module.iam.control_plane_http_lambda_role_arn
+  control_plane_http_authorizer_lambda_role_arn     = module.iam.control_plane_http_authorizer_lambda_role_arn
+  enable_http_api                                   = var.enable_lambda_http_api
+  dispatch_queue_arn                                = module.sqs.dispatch_queue_arn
+  dispatch_queue_url                                = module.sqs.dispatch_queue_url
+  dispatch_queue_visibility_timeout_seconds         = module.sqs.visibility_timeout_seconds
+  result_queue_arn                                  = module.sqs.result_queue_arn
+  result_queue_url                                  = module.sqs.result_queue_url
+  dynamodb_table_name                               = module.dynamodb.table_name
+  worker_dedupe_table_name                          = module.dynamodb.dedupe_table_name
+  dynamodb_gsi_name                                 = module.dynamodb.gsi_name
+  prompts_bucket_name                               = module.s3.prompts_bucket_name
+  results_bucket_name                               = module.s3.results_bucket_name
+  provider_lambda_package_path                      = local.provider_lambda_package_path
+  result_lambda_package_path                        = local.result_lambda_package_path
+  outbox_lambda_package_path                        = local.outbox_lambda_package_path
+  control_plane_http_lambda_package_path            = local.control_plane_http_lambda_package_path
+  control_plane_http_authorizer_lambda_package_path = local.control_plane_http_authorizer_lambda_package_path
 }
 
 # T-8.2 – T-8.6: CloudWatch alarms and SNS

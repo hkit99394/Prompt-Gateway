@@ -43,6 +43,11 @@ variable "control_plane_http_lambda_role_arn" {
   type        = string
 }
 
+variable "control_plane_http_authorizer_lambda_role_arn" {
+  description = "Execution role ARN for the Control Plane HTTP authorizer Lambda"
+  type        = string
+}
+
 variable "dispatch_queue_arn" {
   description = "Dispatch queue ARN"
   type        = string
@@ -119,6 +124,12 @@ variable "control_plane_http_lambda_package_path" {
   default     = "artifacts/control-plane-api-lambda.zip"
 }
 
+variable "control_plane_http_authorizer_lambda_package_path" {
+  description = "Path to the Control Plane HTTP authorizer Lambda deployment zip"
+  type        = string
+  default     = "artifacts/control-plane-authorizer-lambda.zip"
+}
+
 variable "provider_lambda_handler" {
   description = "Handler string for the provider Lambda"
   type        = string
@@ -141,6 +152,12 @@ variable "control_plane_http_lambda_handler" {
   description = "Handler string for the Control Plane HTTP Lambda"
   type        = string
   default     = "ControlPlane.Api.Lambda"
+}
+
+variable "control_plane_http_authorizer_lambda_handler" {
+  description = "Handler string for the Control Plane HTTP authorizer Lambda"
+  type        = string
+  default     = "ControlPlane.Api.Authorizer::ControlPlane.Api.Authorizer.ApiKeyAuthorizerFunction::FunctionHandler"
 }
 
 variable "provider_lambda_timeout" {
@@ -167,6 +184,12 @@ variable "control_plane_http_lambda_timeout" {
   default     = 30
 }
 
+variable "control_plane_http_authorizer_lambda_timeout" {
+  description = "Timeout in seconds for the Control Plane HTTP authorizer Lambda"
+  type        = number
+  default     = 10
+}
+
 variable "provider_lambda_memory_size" {
   description = "Memory size in MB for the provider Lambda"
   type        = number
@@ -191,6 +214,12 @@ variable "control_plane_http_lambda_memory_size" {
   default     = 1024
 }
 
+variable "control_plane_http_authorizer_lambda_memory_size" {
+  description = "Memory size in MB for the Control Plane HTTP authorizer Lambda"
+  type        = number
+  default     = 256
+}
+
 variable "provider_lambda_reserved_concurrency" {
   description = "Reserved concurrency for the provider Lambda"
   type        = number
@@ -211,6 +240,12 @@ variable "outbox_lambda_reserved_concurrency" {
 
 variable "control_plane_http_lambda_reserved_concurrency" {
   description = "Reserved concurrency for the Control Plane HTTP Lambda"
+  type        = number
+  default     = 5
+}
+
+variable "control_plane_http_authorizer_lambda_reserved_concurrency" {
+  description = "Reserved concurrency for the Control Plane HTTP authorizer Lambda"
   type        = number
   default     = 5
 }

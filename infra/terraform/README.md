@@ -55,8 +55,10 @@ This produces:
 - `artifacts/provider-worker-lambda.zip`
 - `artifacts/control-plane-result-lambda.zip`
 - `artifacts/control-plane-outbox-lambda.zip`
+- `artifacts/control-plane-api-lambda.zip`
+- `artifacts/control-plane-authorizer-lambda.zip`
 
-The environment variables `provider_lambda_package_path`, `result_lambda_package_path`, and `outbox_lambda_package_path` can override those defaults when needed.
+The environment variables `provider_lambda_package_path`, `result_lambda_package_path`, `outbox_lambda_package_path`, `control_plane_http_lambda_package_path`, and `control_plane_http_authorizer_lambda_package_path` can override those defaults when needed.
 
 Those package path variables may be either absolute paths or repo-root-relative paths such as `artifacts/provider-worker-lambda.zip`.
 

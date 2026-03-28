@@ -6,6 +6,7 @@ public sealed class CanonicalJobRequest
     public string? AttemptId { get; init; }
     public string? TraceId { get; init; }
     public string TaskType { get; init; } = string.Empty;
+    public string? PromptText { get; init; }
     public string? InputRef { get; init; }
     public string? PromptKey { get; init; }
     public string? PromptBucket { get; init; }
@@ -24,6 +25,11 @@ public sealed class CanonicalJobRequest
                || !string.IsNullOrWhiteSpace(InputRef);
     }
 
+    public bool HasPromptSource()
+    {
+        return !string.IsNullOrWhiteSpace(PromptText) || HasPromptReference();
+    }
+
     public CanonicalJobRequest WithIds(string jobId, string attemptId, string traceId)
     {
         return new CanonicalJobRequest
@@ -32,6 +38,7 @@ public sealed class CanonicalJobRequest
             AttemptId = attemptId,
             TraceId = traceId,
             TaskType = TaskType,
+            PromptText = PromptText,
             InputRef = InputRef,
             PromptKey = PromptKey,
             PromptBucket = PromptBucket,
@@ -53,6 +60,7 @@ public sealed class CanonicalJobRequest
             AttemptId = AttemptId,
             TraceId = TraceId,
             TaskType = TaskType,
+            PromptText = PromptText,
             InputRef = InputRef,
             PromptKey = PromptKey,
             PromptBucket = PromptBucket,
@@ -74,6 +82,7 @@ public sealed class CanonicalJobRequest
         }
 
         return string.Equals(TaskType, other.TaskType, StringComparison.Ordinal)
+               && string.Equals(PromptText, other.PromptText, StringComparison.Ordinal)
                && string.Equals(InputRef, other.InputRef, StringComparison.Ordinal)
                && string.Equals(PromptKey, other.PromptKey, StringComparison.Ordinal)
                && string.Equals(PromptBucket, other.PromptBucket, StringComparison.Ordinal)

@@ -71,6 +71,27 @@ public class PromptTemplateStoreTests
     }
 
     [Test]
+    public async Task GetTemplateAsync_ReturnsInlinePromptWithoutObjectStoreLookup()
+    {
+        var store = Substitute.For<IObjectStore>();
+        var options = TestOptions.Create(new ProviderWorkerOptions
+        {
+            PromptBucket = "bucket"
+        });
+        var templateStore = new PromptTemplateStore(store, options);
+
+        var job = new CanonicalJobRequest
+        {
+            PromptText = "inline prompt body"
+        };
+
+        var result = await templateStore.GetTemplateAsync(job, CancellationToken.None);
+
+        Assert.That(result, Is.EqualTo("inline prompt body"));
+        await store.DidNotReceive().GetObjectTextAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task GetTemplateAsync_UsesInputRefAsPromptKey()
     {
         var store = Substitute.For<IObjectStore>();

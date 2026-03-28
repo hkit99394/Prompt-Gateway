@@ -40,3 +40,8 @@ output "control_plane_http_lambda_role_arn" {
   description = "Control plane HTTP Lambda role ARN"
   value       = aws_iam_role.control_plane_http_lambda.arn
 }
+
+output "control_plane_http_authorizer_lambda_role_arn" {
+  description = "Control plane HTTP authorizer Lambda role ARN"
+  value       = aws_iam_role.control_plane_http_authorizer_lambda.arn
+}

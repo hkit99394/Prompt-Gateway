@@ -291,6 +291,7 @@ public sealed class ProviderMessageProcessor : IProviderMessageProcessor
 
             var taskType = string.Empty;
             string? model = null;
+            string? promptText = null;
             string? inputRef = null;
             string? promptKey = null;
             string? promptBucket = null;
@@ -308,6 +309,11 @@ public sealed class ProviderMessageProcessor : IProviderMessageProcessor
                 if (requestEl.TryGetProperty("inputRef", out var inputRefEl))
                 {
                     inputRef = inputRefEl.GetString();
+                }
+
+                if (requestEl.TryGetProperty("promptText", out var promptTextEl))
+                {
+                    promptText = promptTextEl.GetString();
                 }
 
                 if (requestEl.TryGetProperty("promptKey", out var promptKeyEl))
@@ -358,6 +364,7 @@ public sealed class ProviderMessageProcessor : IProviderMessageProcessor
                 JobId = jobId,
                 AttemptId = attemptId,
                 TaskType = string.IsNullOrWhiteSpace(taskType) ? CanonicalTaskTypes.ChatCompletion : taskType,
+                PromptText = promptText,
                 InputRef = inputRef,
                 PromptKey = promptKey,
                 PromptBucket = promptBucket,

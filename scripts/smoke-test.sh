@@ -8,8 +8,9 @@
 #   BASE_URL  - Base URL (e.g. http://alb-dns or https://api.example.com)
 #   API_KEY   - X-API-Key value for authentication
 #   --insecure - Optional: skip SSL cert verification (curl -k) for HTTPS URLs
- # Env:
+# Env:
 #   SMOKE_INPUT_REF - Optional prompt reference key (default: prompts/smoke-test.txt)
+#   SMOKE_INLINE_PROMPT_TEXT - Optional inline prompt body for the per-request path
 #
 # Exits 0 on success, 1 on failure.
 
@@ -23,6 +24,7 @@ fi
 BASE_URL="${1%/}"
 API_KEY="$2"
 INPUT_REF="${SMOKE_INPUT_REF:-prompts/smoke-test.txt}"
+INLINE_PROMPT_TEXT="${SMOKE_INLINE_PROMPT_TEXT:-Reply with exactly: inline smoke test ok}"
 CURL_OPTS=(-sf)
 if [ "${3:-}" = "--insecure" ]; then
   CURL_OPTS=(-skf)
@@ -30,6 +32,7 @@ fi
 
 echo "Smoke test: BASE_URL=$BASE_URL"
 echo "Smoke test: INPUT_REF=$INPUT_REF"
+echo "Smoke test: INLINE_PROMPT_TEXT configured"
 
 print_job_diagnostics() {
   local job_id="$1"
@@ -45,6 +48,117 @@ print_job_diagnostics() {
   echo "  Diagnostic: GET /jobs/$job_id/events"
   curl -s "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/jobs/$job_id/events" || true
   echo ""
+}
+
+run_job_flow() {
+  local scenario="$1"
+  local post_body="$2"
+  local response
+  local body
+  local http_code
+  local job_id
+  local requires_resume
+  local resume_response
+  local resume_body
+  local resume_http_code
+  local timeout
+  local elapsed
+  local interval
+  local state
+  local job_response
+
+  echo "  Scenario: $scenario"
+  echo "  POST /jobs..."
+  response=$(curl -w "\n%{http_code}" "${CURL_OPTS_NOFAIL[@]}" \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -H "X-API-Key: $API_KEY" \
+    -d "$post_body" \
+    "$BASE_URL/jobs")
+  body=$(echo "$response" | sed '$d')
+  http_code=$(echo "$response" | tail -n 1)
+
+  if [ "$http_code" != "200" ] && [ "$http_code" != "201" ] && [ "$http_code" != "202" ]; then
+    echo "  FAIL: POST /jobs returned $http_code (expected 200, 201, or 202)"
+    echo "  Response: $body"
+    exit 1
+  fi
+
+  job_id=$(echo "$body" | jq -r '.jobId // .JobId // empty')
+  if [ -z "$job_id" ]; then
+    echo "  FAIL: POST /jobs response missing jobId"
+    echo "  Response: $body"
+    exit 1
+  fi
+  echo "  OK: POST /jobs -> $http_code, jobId=$job_id"
+
+  requires_resume=$(echo "$body" | jq -r '.requiresResume // .RequiresResume // false' 2>/dev/null || echo "false")
+  if [ "$requires_resume" = "true" ]; then
+    echo "  Job requires resume. POST /jobs/$job_id/resume..."
+    resume_response=$(curl -w "\n%{http_code}" "${CURL_OPTS_NOFAIL[@]}" \
+      -X POST \
+      -H "X-API-Key: $API_KEY" \
+      "$BASE_URL/jobs/$job_id/resume")
+    resume_body=$(echo "$resume_response" | sed '$d')
+    resume_http_code=$(echo "$resume_response" | tail -n 1)
+
+    if [ "$resume_http_code" != "200" ] && [ "$resume_http_code" != "202" ]; then
+      echo "  FAIL: POST /jobs/$job_id/resume returned $resume_http_code (expected 200 or 202)"
+      echo "  Response: $resume_body"
+      print_job_diagnostics "$job_id"
+      exit 1
+    fi
+
+    echo "  OK: POST /jobs/$job_id/resume -> $resume_http_code"
+  fi
+
+  echo "  Polling GET /jobs/$job_id..."
+  timeout="${SMOKE_TIMEOUT_SECONDS:-90}"
+  elapsed=0
+  interval=3
+  state=""
+
+  while [ $elapsed -lt $timeout ]; do
+    job_response=$(curl -s "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/jobs/$job_id" || echo "{}")
+    state=$(echo "$job_response" | jq -r '.State // .state // empty' 2>/dev/null || echo "")
+
+    if [ "$state" = "Completed" ] || [ "$state" = "4" ]; then
+      echo "  OK: Job completed"
+      break
+    fi
+    if [ "$state" = "Failed" ] || [ "$state" = "5" ]; then
+      echo "  FAIL: Job failed (T-7.8)"
+      echo "  Response: $job_response"
+      print_job_diagnostics "$job_id"
+      exit 1
+    fi
+
+    sleep $interval
+    elapsed=$((elapsed + interval))
+    echo "    ... state=$state (${elapsed}s)"
+  done
+
+  if [ "$state" != "Completed" ] && [ "$state" != "4" ]; then
+    job_response=$(curl -s "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/jobs/$job_id" || echo "{}")
+    state=$(echo "$job_response" | jq -r '.State // .state // empty' 2>/dev/null || echo "")
+
+    if [ "$state" = "Completed" ] || [ "$state" = "4" ]; then
+      echo "  OK: Job completed"
+    else
+      echo "  FAIL: Timeout after ${timeout}s, state=$state"
+      print_job_diagnostics "$job_id"
+      exit 1
+    fi
+  fi
+
+  echo "  GET /jobs/$job_id/result..."
+  http_code=$(curl -s -o /dev/null -w "%{http_code}" "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/jobs/$job_id/result" || true)
+  if [ "$http_code" != "200" ]; then
+    echo "  FAIL: GET /jobs/$job_id/result returned $http_code (expected 200)"
+    print_job_diagnostics "$job_id"
+    exit 1
+  fi
+  echo "  OK: GET /jobs/$job_id/result -> 200"
 }
 
 # T-7.3: GET /health
@@ -75,101 +189,10 @@ echo "  OK: /ready -> 200"
 # Use curl without -f so we capture body and HTTP code on 4xx/5xx for diagnostics
 CURL_OPTS_NOFAIL=(-s)
 [ "${3:-}" = "--insecure" ] && CURL_OPTS_NOFAIL=(-sk)
-POST_BODY=$(jq -nc --arg inputRef "$INPUT_REF" '{taskType:"chat_completion",inputRef:$inputRef}')
-echo "  POST /jobs..."
-RESPONSE=$(curl -w "\n%{http_code}" "${CURL_OPTS_NOFAIL[@]}" \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $API_KEY" \
-  -d "$POST_BODY" \
-  "$BASE_URL/jobs")
-BODY=$(echo "$RESPONSE" | sed '$d')
-HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+REF_POST_BODY=$(jq -nc --arg inputRef "$INPUT_REF" '{taskType:"chat_completion",inputRef:$inputRef}')
+INLINE_POST_BODY=$(jq -nc --arg promptText "$INLINE_PROMPT_TEXT" '{taskType:"chat_completion",promptText:$promptText}')
 
-# Accept legacy 200/201 and new durable-acceptance 202
-if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "202" ]; then
-  echo "  FAIL: POST /jobs returned $HTTP_CODE (expected 200, 201, or 202)"
-  echo "  Response: $BODY"
-  exit 1
-fi
-
-JOB_ID=$(echo "$BODY" | jq -r '.jobId // .JobId // empty')
-if [ -z "$JOB_ID" ]; then
-  echo "  FAIL: POST /jobs response missing jobId"
-  echo "  Response: $BODY"
-  exit 1
-fi
-echo "  OK: POST /jobs -> $HTTP_CODE, jobId=$JOB_ID"
-
-REQUIRES_RESUME=$(echo "$BODY" | jq -r '.requiresResume // .RequiresResume // false' 2>/dev/null || echo "false")
-if [ "$REQUIRES_RESUME" = "true" ]; then
-  echo "  Job requires resume. POST /jobs/$JOB_ID/resume..."
-  RESUME_RESPONSE=$(curl -w "\n%{http_code}" "${CURL_OPTS_NOFAIL[@]}" \
-    -X POST \
-    -H "X-API-Key: $API_KEY" \
-    "$BASE_URL/jobs/$JOB_ID/resume")
-  RESUME_BODY=$(echo "$RESUME_RESPONSE" | sed '$d')
-  RESUME_HTTP_CODE=$(echo "$RESUME_RESPONSE" | tail -n 1)
-
-  if [ "$RESUME_HTTP_CODE" != "200" ] && [ "$RESUME_HTTP_CODE" != "202" ]; then
-    echo "  FAIL: POST /jobs/$JOB_ID/resume returned $RESUME_HTTP_CODE (expected 200 or 202)"
-    echo "  Response: $RESUME_BODY"
-    print_job_diagnostics "$JOB_ID"
-    exit 1
-  fi
-
-  echo "  OK: POST /jobs/$JOB_ID/resume -> $RESUME_HTTP_CODE"
-fi
-
-# T-7.6: Poll GET /jobs/{job_id} until Completed or Failed (default timeout 90s)
-echo "  Polling GET /jobs/$JOB_ID..."
-TIMEOUT="${SMOKE_TIMEOUT_SECONDS:-90}"
-ELAPSED=0
-INTERVAL=3
-STATE=""
-
-while [ $ELAPSED -lt $TIMEOUT ]; do
-  JOB_RESPONSE=$(curl -s "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/jobs/$JOB_ID" || echo "{}")
-  STATE=$(echo "$JOB_RESPONSE" | jq -r '.State // .state // empty' 2>/dev/null || echo "")
-
-  # Accept string ("Completed"/"Failed") or integer (4=Completed, 5=Failed) per JobState enum
-  if [ "$STATE" = "Completed" ] || [ "$STATE" = "4" ]; then
-    echo "  OK: Job completed"
-    break
-  fi
-  if [ "$STATE" = "Failed" ] || [ "$STATE" = "5" ]; then
-    echo "  FAIL: Job failed (T-7.8)"
-    echo "  Response: $JOB_RESPONSE"
-    print_job_diagnostics "$JOB_ID"
-    exit 1
-  fi
-
-  sleep $INTERVAL
-  ELAPSED=$((ELAPSED + INTERVAL))
-  echo "    ... state=$STATE (${ELAPSED}s)"
-done
-
-if [ "$STATE" != "Completed" ] && [ "$STATE" != "4" ]; then
-  JOB_RESPONSE=$(curl -s "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/jobs/$JOB_ID" || echo "{}")
-  STATE=$(echo "$JOB_RESPONSE" | jq -r '.State // .state // empty' 2>/dev/null || echo "")
-
-  if [ "$STATE" = "Completed" ] || [ "$STATE" = "4" ]; then
-    echo "  OK: Job completed"
-  else
-  echo "  FAIL: Timeout after ${TIMEOUT}s, state=$STATE"
-  print_job_diagnostics "$JOB_ID"
-  exit 1
-  fi
-fi
-
-# T-7.7: GET /jobs/{job_id}/result
-echo "  GET /jobs/$JOB_ID/result..."
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${CURL_OPTS[@]}" -H "X-API-Key: $API_KEY" "$BASE_URL/jobs/$JOB_ID/result" || true)
-if [ "$HTTP_CODE" != "200" ]; then
-  echo "  FAIL: GET /jobs/$JOB_ID/result returned $HTTP_CODE (expected 200)"
-  print_job_diagnostics "$JOB_ID"
-  exit 1
-fi
-echo "  OK: GET /jobs/$JOB_ID/result -> 200"
+run_job_flow "prepared prompt reference" "$REF_POST_BODY"
+run_job_flow "inline prompt request" "$INLINE_POST_BODY"
 
 echo "Smoke test passed."

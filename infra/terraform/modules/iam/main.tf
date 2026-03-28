@@ -453,6 +453,28 @@ resource "aws_iam_role" "control_plane_http_lambda" {
   }
 }
 
+resource "aws_iam_role" "control_plane_http_authorizer_lambda" {
+  name = "prompt-gateway-${var.environment}-control-plane-http-authorizer"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "prompt-gateway-${var.environment}-control-plane-http-authorizer"
+    Environment = var.environment
+  }
+}
+
 resource "aws_iam_role_policy_attachment" "provider_worker_lambda_basic" {
   role       = aws_iam_role.provider_worker_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
@@ -470,6 +492,11 @@ resource "aws_iam_role_policy_attachment" "outbox_lambda_basic" {
 
 resource "aws_iam_role_policy_attachment" "control_plane_http_lambda_basic" {
   role       = aws_iam_role.control_plane_http_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "control_plane_http_authorizer_lambda_basic" {
+  role       = aws_iam_role.control_plane_http_authorizer_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
@@ -639,6 +666,27 @@ resource "aws_iam_role_policy" "control_plane_http_lambda_runtime" {
           var.result_queue_arn
         ]
       },
+      {
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = local.control_plane_secrets_arns
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
+        Resource = [local.ssm_api_keys_param_arn]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "control_plane_http_authorizer_lambda_runtime" {
+  name = "runtime"
+  role = aws_iam_role.control_plane_http_authorizer_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
       {
         Effect   = "Allow"
         Action   = "secretsmanager:GetSecretValue"

@@ -7,6 +7,7 @@
 - Lambda/API Gateway promotion for the HTTP edge is in progress, with `ControlPlane.Api.Lambda` available behind `enable_lambda_http_api`.
 - The ECS API host remains the rollback edge until HTTP cutover evidence is complete; it is not the only intended long-term path anymore.
 - The shared HTTP bootstrap keeps the request contract aligned across both hosts while allowing host-specific options such as hosted workers and Swagger exposure.
+- When the Lambda HTTP edge is enabled, API Gateway now performs a request-authorizer API-key check before forwarding protected routes. The ASP.NET host still enforces the same API-key contract as an application-layer backstop.
 
 ## Required configuration
 
@@ -49,10 +50,12 @@
   - Follow-up routing and dispatch continue asynchronously when the post-accept worker is enabled.
   - If the response includes `requiresResume=true`, call `POST /jobs/{jobId}/resume` to continue processing manually.
   - This manual-resume path is expected for the Lambda HTTP host until post-accept continuation is moved to a fully serverless mechanism.
-- `POST /jobs` for `taskType=chat_completion` requires at least one prompt reference field:
+- `POST /jobs` for `taskType=chat_completion` requires either inline prompt content or a prompt reference:
+  - `promptText` (inline per-request prompt body)
   - `inputRef` (legacy-compatible, mapped to worker prompt key)
   - `promptKey`
   - `promptS3Key`
+  - When `promptText` is present, the worker uses it directly; prompt references remain the path for prepared/shared prompts stored in S3.
 - Protected endpoints:
   - `POST /jobs`
   - `POST /jobs/{jobId}/resume`
@@ -84,11 +87,20 @@ curl -i \
   "http://localhost:5000/jobs"
 ```
 
+```bash
+curl -i \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $CONTROL_PLANE_API_KEY" \
+  -d '{"taskType":"chat_completion","promptText":"Explain retrieval-augmented generation simply.","systemPrompt":"You are concise."}' \
+  "http://localhost:5000/jobs"
+```
+
 ## Expected response codes
 
 - `202`: job intake accepted
 - `200`: read operation succeeded
-- `400`: invalid request payload (for example missing `taskType` or prompt reference for `chat_completion`)
+- `400`: invalid request payload (for example missing `taskType` or both inline prompt content and prompt reference for `chat_completion`)
 - `401`: missing/invalid `X-API-Key`
 - `409`: orchestration state conflict or idempotency key/job ID reused for a different request
 

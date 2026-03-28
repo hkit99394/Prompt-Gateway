@@ -87,6 +87,7 @@ public sealed class SqsDispatchQueue : IDispatchQueue
             AttemptId = message.AttemptId,
             TraceId = message.TraceId,
             TaskType = request.TaskType,
+            PromptText = request.PromptText,
             PromptKey = promptKey,
             PromptBucket = promptBucket,
             PromptS3Key = promptS3Key,
@@ -137,6 +138,7 @@ public sealed class SqsDispatchQueue : IDispatchQueue
         public string AttemptId { get; init; } = string.Empty;
         public string TraceId { get; init; } = string.Empty;
         public string TaskType { get; init; } = string.Empty;
+        public string? PromptText { get; init; }
         public string? PromptKey { get; init; }
         public string? PromptBucket { get; init; }
         public string? PromptS3Key { get; init; }
