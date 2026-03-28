@@ -1,11 +1,11 @@
-# CD workflow - deploy to dev on push to main
+# CD workflow - deploy to dev on push to main via the repo promotion scripts
 # Implementation: T-4.1.x, T-4.3.x, T-7.9
 #
 # Prerequisites:
 # - Configure GitHub OIDC with AWS (oidc-provider, IAM role)
 # - Add AWS_ROLE_ARN to the dev environment (or repo secret)
-# - Ensure ECR repos, ECS cluster, and task definitions exist (terraform apply)
-# - For full smoke test: set SMOKE_TEST_API_KEY, or dev uses SSM /prompt-gateway/dev/api-keys (JSON array)
+# - Ensure Terraform backend resources already exist for dev
+# - Ensure dev secrets/SSM parameters already exist for the smoke test
 
 name: CD Dev
 
@@ -20,125 +20,46 @@ jobs:
     environment: ${{ vars.DEPLOY_ENV_NAME || 'dev' }}
 
     permissions:
-      id-token: write   # Required for OIDC with AWS
+      id-token: write
       contents: read
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          # fromJSON(toJSON()) bypasses linter validation for vars not visible locally
           role-to-assume: ${{ fromJSON(toJSON(vars)).AWS_ROLE_ARN }}
           aws-region: us-east-1
 
-      - name: Login to Amazon ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Set ECR registry
-        id: registry
-        run: |
-          echo "registry=$(echo ${{ steps.ecr.outputs.registry }} | sed 's|https://||')" >> $GITHUB_OUTPUT
-
-      - name: Build and push Control Plane API
+      - name: Write dev tfvars
         env:
-          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
-          ECR_REPO_API: prompt-gateway-dev-control-plane-api
+          ALARM_EMAIL: ${{ vars.ALARM_EMAIL }}
+        run: |
+          TFVARS_PATH="infra/terraform/environments/dev/dev.tfvars"
+          printf 'aws_region = "us-east-1"\nenvironment = "dev"\n' > "$TFVARS_PATH"
+          if [ -n "${ALARM_EMAIL:-}" ]; then
+            printf 'alarm_email = "%s"\n' "$ALARM_EMAIL" >> "$TFVARS_PATH"
+          fi
+
+      - name: Deploy Lambda mode to dev
+        env:
           IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPO_API:latest \
-            -f "./Prompt Gateway – Control Plane /src/ControlPlane.Api/Dockerfile" \
-            "./Prompt Gateway – Control Plane /src"
-          docker push $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPO_API:latest
+          HTTP_EDGE_MODE: lambda
+        run: ./scripts/first-deploy-phase3.sh --processing-mode lambda
 
-      - name: Build and push Provider Worker
+      - name: Smoke test dev
         env:
-          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
-          ECR_REPO_WORKER: prompt-gateway-dev-provider-worker
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPO_WORKER:latest \
-            -f "./Prompt Gateway Provider - OpenAI/src/Provider.Worker.Host/Dockerfile" \
-            "./Prompt Gateway Provider - OpenAI/src"
-          docker push $ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPO_WORKER:latest
-
-      - name: Update and register task definitions
-        env:
-          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          API_IMAGE="$ECR_REGISTRY/prompt-gateway-dev-control-plane-api:$IMAGE_TAG"
-          WORKER_IMAGE="$ECR_REGISTRY/prompt-gateway-dev-provider-worker:$IMAGE_TAG"
-          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-          REGION=us-east-1
-          # Dev uses SSM (not Secrets Manager); set secrets explicitly so we never inherit a SM ARN
-          API_KEYS_SSM="arn:aws:ssm:${REGION}:${ACCOUNT}:parameter/prompt-gateway/dev/api-keys"
-          OPENAI_SSM="arn:aws:ssm:${REGION}:${ACCOUNT}:parameter/prompt-gateway/dev/openai-api-key"
-
-          aws ecs describe-task-definition --task-definition prompt-gateway-dev-control-plane-api \
-            | jq '.taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = "'"$API_IMAGE"'" | .containerDefinitions[0].secrets = [{"name":"ApiSecurity__ApiKey","valueFrom":"'"$API_KEYS_SSM"'"}]' \
-            > /tmp/api-taskdef.json
-          aws ecs describe-task-definition --task-definition prompt-gateway-dev-provider-worker \
-            | jq '.taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = "'"$WORKER_IMAGE"'" | .containerDefinitions[0].secrets = [{"name":"ProviderWorker__OpenAi__ApiKey","valueFrom":"'"$OPENAI_SSM"'"}]' \
-            > /tmp/worker-taskdef.json
-
-          aws ecs register-task-definition --cli-input-json file:///tmp/api-taskdef.json
-          aws ecs register-task-definition --cli-input-json file:///tmp/worker-taskdef.json
-
-      - name: Update ECS API service
-        run: |
-          aws ecs update-service \
-            --cluster prompt-gateway-dev \
-            --service control-plane-api \
-            --task-definition prompt-gateway-dev-control-plane-api \
-            --force-new-deployment \
-            --no-cli-pager
-
-      - name: Update ECS worker service
-        run: |
-          aws ecs update-service \
-            --cluster prompt-gateway-dev \
-            --service provider-worker \
-            --task-definition prompt-gateway-dev-provider-worker \
-            --force-new-deployment \
-            --no-cli-pager
-
-      - name: Wait for services to stabilize
-        run: |
-          aws ecs wait services-stable \
-            --cluster prompt-gateway-dev \
-            --services control-plane-api provider-worker
-
-      - name: Smoke test
-        env:
-          # fromJSON(toJSON()) bypasses linter validation for secrets not visible locally
           API_KEY: ${{ fromJSON(toJSON(secrets)).SMOKE_TEST_API_KEY }}
-        run: |
-          ALB_DNS=$(aws elbv2 describe-load-balancers \
-            --names prompt-gateway-dev \
-            --query 'LoadBalancers[0].DNSName' \
-            --output text)
-          BASE_URL="http://$ALB_DNS"
-          echo "Smoke test BASE_URL: $BASE_URL"
-          if [ -z "$API_KEY" ]; then
-            API_KEY=$(aws ssm get-parameter --name "/prompt-gateway/dev/api-keys" --with-decryption --query Parameter.Value --output text 2>/dev/null | jq -r '.[0] // empty')
-          fi
-          if [ -z "$API_KEY" ]; then
-            API_KEY=$(aws secretsmanager get-secret-value \
-              --secret-id "prompt-gateway/dev/api-keys" \
-              --query SecretString --output text 2>/dev/null | jq -r '.[0] // empty')
-          fi
-          if [ -z "$API_KEY" ]; then
-            echo "Skipping full smoke test: no API key (set SMOKE_TEST_API_KEY or create secret)"
-            curl -sf "$BASE_URL/health" || (echo "Health check failed" && exit 1)
-          else
-            chmod +x scripts/smoke-test.sh
-            ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY"
-          fi
+          HEALTH_CHECK_BASE_URL: ${{ vars.HEALTH_CHECK_BASE_URL }}
+          HTTP_EDGE_MODE: lambda
+        run: ./scripts/first-deploy-phase4.sh

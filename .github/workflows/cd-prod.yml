@@ -1,20 +1,18 @@
-# CD workflow - deploy to prod (manual)
+# CD workflow - deploy to prod manually via the repo promotion scripts
 # Implementation: T-4.2.4, T-4.2.5, T-4.2.6, T-4.3.15, T-7.9
 #
 # Prerequisites:
 # - Configure GitHub OIDC with AWS
 # - Add AWS_ROLE_ARN to the prod environment
-# - Configure required reviewers in Settings → Environments → prod
-# - Ensure ECR repos, ECS cluster, and task definitions exist (terraform apply)
-# - For full smoke test: create secret prompt-gateway/prod/api-keys or set SMOKE_TEST_API_KEY
-# - Optional: set HEALTH_CHECK_BASE_URL for SSL verification (e.g. https://api.example.com)
+# - Add CERTIFICATE_ARN to the prod environment
+# - Configure required reviewers in Settings -> Environments -> prod
+# - Ensure Terraform backend resources already exist for prod
+# - Ensure prod secrets already exist for the smoke test
 
 name: CD Prod
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
 
 jobs:
   deploy:
@@ -30,116 +28,40 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          # fromJSON(toJSON()) bypasses linter validation for vars not visible locally
           role-to-assume: ${{ fromJSON(toJSON(vars)).AWS_ROLE_ARN }}
           aws-region: us-east-1
 
-      - name: Login to Amazon ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2 
-
-      - name: Set ECR registry
-        id: registry
-        run: |
-          echo "registry=$(echo ${{ steps.ecr.outputs.registry }} | sed 's|https://||')" >> $GITHUB_OUTPUT
-
-      - name: Build and push Control Plane API
+      - name: Write prod tfvars
         env:
-          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
-          ECR_REPO_API: prompt-gateway-prod-control-plane-api
+          CERTIFICATE_ARN: ${{ vars.CERTIFICATE_ARN }}
+          ALARM_EMAIL: ${{ vars.ALARM_EMAIL }}
+        run: |
+          if [ -z "${CERTIFICATE_ARN:-}" ]; then
+            echo "CERTIFICATE_ARN GitHub environment variable is required for prod deployments."
+            exit 1
+          fi
+
+          TFVARS_PATH="infra/terraform/environments/prod/prod.tfvars"
+          printf 'aws_region = "us-east-1"\nenvironment = "prod"\ncertificate_arn = "%s"\n' "$CERTIFICATE_ARN" > "$TFVARS_PATH"
+          if [ -n "${ALARM_EMAIL:-}" ]; then
+            printf 'alarm_email = "%s"\n' "$ALARM_EMAIL" >> "$TFVARS_PATH"
+          fi
+
+      - name: Promote Lambda mode to prod
+        env:
           IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPO_API:latest \
-            -f "./Prompt Gateway – Control Plane /src/ControlPlane.Api/Dockerfile" \
-            "./Prompt Gateway – Control Plane /src"
-          docker push $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPO_API:latest
-
-      - name: Build and push Provider Worker
-        env:
-          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
-          ECR_REPO_WORKER: prompt-gateway-prod-provider-worker
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPO_WORKER:latest \
-            -f "./Prompt Gateway Provider - OpenAI/src/Provider.Worker.Host/Dockerfile" \
-            "./Prompt Gateway Provider - OpenAI/src"
-          docker push $ECR_REGISTRY/$ECR_REPO_WORKER:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPO_WORKER:latest
-
-      - name: Update and register task definitions
-        env:
-          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          API_IMAGE="$ECR_REGISTRY/prompt-gateway-prod-control-plane-api:$IMAGE_TAG"
-          WORKER_IMAGE="$ECR_REGISTRY/prompt-gateway-prod-provider-worker:$IMAGE_TAG"
-
-          aws ecs describe-task-definition --task-definition prompt-gateway-prod-control-plane-api \
-            | jq '.taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = "'"$API_IMAGE"'"' \
-            > /tmp/api-taskdef.json
-          aws ecs describe-task-definition --task-definition prompt-gateway-prod-provider-worker \
-            | jq '.taskDefinition | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) | .containerDefinitions[0].image = "'"$WORKER_IMAGE"'"' \
-            > /tmp/worker-taskdef.json
-
-          aws ecs register-task-definition --cli-input-json file:///tmp/api-taskdef.json
-          aws ecs register-task-definition --cli-input-json file:///tmp/worker-taskdef.json
-
-      - name: Update ECS API service
-        run: |
-          aws ecs update-service \
-            --cluster prompt-gateway-prod \
-            --service control-plane-api \
-            --task-definition prompt-gateway-prod-control-plane-api \
-            --force-new-deployment \
-            --no-cli-pager
-
-      - name: Update ECS worker service
-        run: |
-          aws ecs update-service \
-            --cluster prompt-gateway-prod \
-            --service provider-worker \
-            --task-definition prompt-gateway-prod-provider-worker \
-            --force-new-deployment \
-            --no-cli-pager
-
-      - name: Wait for services to stabilize
-        run: |
-          aws ecs wait services-stable \
-            --cluster prompt-gateway-prod \
-            --services control-plane-api provider-worker
-
-      - name: Smoke test
-        env:
-          HEALTH_CHECK_BASE_URL: ${{ vars.HEALTH_CHECK_BASE_URL }}
           API_KEY: ${{ secrets.SMOKE_TEST_API_KEY }}
-        run: |
-          ALB_DNS=$(aws elbv2 describe-load-balancers \
-            --names prompt-gateway-prod \
-            --query 'LoadBalancers[0].DNSName' \
-            --output text)
-          BASE_URL="${HEALTH_CHECK_BASE_URL:-https://$ALB_DNS}"
-          USE_INSECURE=""
-          [ -z "$HEALTH_CHECK_BASE_URL" ] && USE_INSECURE="--insecure"
-          echo "Smoke test BASE_URL: $BASE_URL"
-          if [ -z "$API_KEY" ]; then
-            API_KEY=$(aws secretsmanager get-secret-value \
-              --secret-id "prompt-gateway/prod/api-keys" \
-              --query SecretString --output text 2>/dev/null | jq -r '.[0] // empty')
-          fi
-          if [ -z "$API_KEY" ]; then
-            echo "Skipping full smoke test: no API key (set SMOKE_TEST_API_KEY or create secret)"
-            if [ -n "$USE_INSECURE" ]; then
-              curl -skf "$BASE_URL/health" || (echo "Health check failed" && exit 1)
-            else
-              curl -sf "$BASE_URL/health" || (echo "Health check failed" && exit 1)
-            fi
-          else
-            chmod +x scripts/smoke-test.sh
-            ./scripts/smoke-test.sh "$BASE_URL" "$API_KEY" "$USE_INSECURE"
-          fi
+          HEALTH_CHECK_BASE_URL: ${{ vars.HEALTH_CHECK_BASE_URL }}
+          HTTP_EDGE_MODE: lambda
+        run: ./scripts/promote-lambda-mode.sh prod
